@@ -1,29 +1,39 @@
 defmodule Composite do
+  import Kernel, except: [apply: 3]
   defstruct param_definitions: [], dep_definitions: %{}, params: nil, input_query: nil
   @type dependency_name :: atom()
   @type param_option ::
-          {:requires, dependency_name() | [dependency_name()]} | {:ignore?, (any() -> boolean())}
+          {:requires,
+           dependency_name()
+           | [dependency_name()]
+           | (value :: any -> nil | dependency_name() | [dependency_name()])}
+          | {:ignore?, (any() -> boolean())}
   @type dependency_option :: {:requires, dependency_name() | [dependency_name()]}
   @type param_path_item :: any()
-  @type query :: any()
-  @type apply_param :: (query(), any() -> query())
-  @type load_dependency :: (query() -> query())
+  @type apply_param(query) :: (query, any() -> query)
+  @type load_dependency(query) :: (query -> query)
   @type params :: Access.t()
-  @type t :: %__MODULE__{
-          param_definitions: [{[param_path_item()], apply_param(), [param_option()]}],
+  @type t(query) :: %__MODULE__{
+          param_definitions: [{[param_path_item()], apply_param(query), [param_option()]}],
           dep_definitions: %{
-            optional(dependency_name()) => [{load_dependency(), [dependency_option()]}]
+            optional(dependency_name()) => [{load_dependency(query), [dependency_option()]}]
           },
           params: params(),
-          input_query: query()
+          input_query: query
         }
 
-  @spec new(query(), params()) :: t()
-  def new(input_query \\ nil, params \\ nil) do
+  @spec new :: t(any())
+  def new, do: %__MODULE__{}
+
+  @spec new(query, params()) :: t(query) when query: any()
+  def new(input_query, params) do
     %__MODULE__{params: params, input_query: input_query}
   end
 
-  @spec param(t(), param_path_item() | [param_path_item()], apply_param, [param_option]) :: t()
+  @spec param(t(query), param_path_item() | [param_path_item()], apply_param(query), [
+          param_option
+        ]) :: t(query)
+        when query: any()
   def param(
         %__MODULE__{param_definitions: param_definitions} = composite,
         path,
@@ -34,7 +44,9 @@ defmodule Composite do
     %{composite | param_definitions: [{List.wrap(path), func, opts} | param_definitions]}
   end
 
-  @spec dependency(t(), dependency_name(), load_dependency, [dependency_option]) :: t()
+  @spec dependency(t(query), dependency_name(), load_dependency(query), [dependency_option]) ::
+          t(query)
+        when query: any()
   def dependency(
         %__MODULE__{dep_definitions: dep_definitions} = flexible_query,
         dependency,
@@ -45,11 +57,16 @@ defmodule Composite do
     %{flexible_query | dep_definitions: Map.put(dep_definitions, dependency, {func, opts})}
   end
 
-  @spec apply(t(), query(), params()) :: query()
+  @spec apply(t(query)) :: query when query: any()
+  def apply(%__MODULE__{} = composite) do
+    apply(nil, composite, nil)
+  end
+
+  @spec apply(query, t(query), params()) :: query when query: any()
   def apply(
+        input_query,
         %__MODULE__{} = composite,
-        input_query \\ nil,
-        params \\ nil
+        params
       ) do
     composite =
       composite
@@ -68,8 +85,17 @@ defmodule Composite do
         if ignore?.(value) do
           {query, loaded_deps}
         else
+          required_deps =
+            opts
+            |> Keyword.get(:requires)
+            |> case do
+              requires when is_function(requires, 1) -> requires.(value)
+              requires -> requires
+            end
+            |> List.wrap()
+
           {query, loaded_deps} =
-            load_dependencies(query, composite.dep_definitions, loaded_deps, opts)
+            load_dependencies(query, composite.dep_definitions, loaded_deps, required_deps)
 
           {func.(query, value), loaded_deps}
         end
@@ -87,9 +113,8 @@ defmodule Composite do
     end
   end
 
-  defp load_dependencies(query, deps_definitions, loaded_deps, opts) do
-    required_deps = opts |> Keyword.get(:requires) |> List.wrap() |> MapSet.new()
-    deps_to_load = MapSet.difference(required_deps, loaded_deps)
+  defp load_dependencies(query, deps_definitions, loaded_deps, required_deps) do
+    deps_to_load = required_deps |> MapSet.new() |> MapSet.difference(loaded_deps)
 
     {query, loaded_deps} =
       Enum.reduce(deps_to_load, {query, loaded_deps}, fn dependency_name, {query, loaded_deps} ->
@@ -102,7 +127,11 @@ defmodule Composite do
               raise "unable to load dependency `#{dependency_name}`"
           end
 
-        {query, loaded_deps} = query |> load_dependencies(deps_definitions, loaded_deps, opts)
+        required_deps = opts |> Keyword.get(:requires) |> List.wrap()
+
+        {query, loaded_deps} =
+          query |> load_dependencies(deps_definitions, loaded_deps, required_deps)
+
         {loader.(query), loaded_deps}
       end)
 
