@@ -1,6 +1,8 @@
 # Composite
+A utility that may help in writing composable queries :).
 
-**TODO: Add description**
+# Example
+See [test file](test/composite_test.exs).
 
 ## Installation
 
@@ -14,8 +16,4 @@ def deps do
   ]
 end
 ```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/composite](https://hexdocs.pm/composite).
-
+Docs can be found at [https://hexdocs.pm/composite](https://hexdocs.pm/composite).
