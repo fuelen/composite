@@ -8,13 +8,24 @@ defmodule Composite.MixProject do
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [plt_add_apps: [:ecto]]
+      dialyzer: [plt_add_apps: [:ecto]],
+      package: package()
     ]
   end
 
   def application do
     [
       extra_applications: [:logger]
+    ]
+  end
+
+  def package do
+    [
+      description: "A library that allows writing composable queries",
+      licenses: ["Apache 2"],
+      links: %{
+        GitHub: "https://github.com/fuelen/composite"
+      }
     ]
   end
 
