@@ -2,19 +2,20 @@ defmodule Composite do
   import Kernel, except: [apply: 3]
   defstruct param_definitions: [], dep_definitions: %{}, params: nil, input_query: nil
   @type dependency_name :: atom()
-  @type param_option ::
+  @type param_option(query) ::
           {:requires,
            dependency_name()
            | [dependency_name()]
            | (value :: any -> nil | dependency_name() | [dependency_name()])}
           | {:ignore?, (any() -> boolean())}
+          | {:on_ignore, (query -> query)}
   @type dependency_option :: {:requires, dependency_name() | [dependency_name()]}
   @type param_path_item :: any()
   @type apply_param(query) :: (query, any() -> query)
   @type load_dependency(query) :: (query -> query)
   @type params :: Access.t()
   @type t(query) :: %__MODULE__{
-          param_definitions: [{[param_path_item()], apply_param(query), [param_option()]}],
+          param_definitions: [{[param_path_item()], apply_param(query), [param_option(query)]}],
           dep_definitions: %{
             optional(dependency_name()) => [{load_dependency(query), [dependency_option()]}]
           },
@@ -31,7 +32,7 @@ defmodule Composite do
   end
 
   @spec param(t(query), param_path_item() | [param_path_item()], apply_param(query), [
-          param_option
+          param_option(query)
         ]) :: t(query)
         when query: any()
   def param(
@@ -48,13 +49,13 @@ defmodule Composite do
           t(query)
         when query: any()
   def dependency(
-        %__MODULE__{dep_definitions: dep_definitions} = flexible_query,
+        %__MODULE__{dep_definitions: dep_definitions} = composite,
         dependency,
         func,
         opts \\ []
       )
       when is_function(func, 1) do
-    %{flexible_query | dep_definitions: Map.put(dep_definitions, dependency, {func, opts})}
+    %{composite | dep_definitions: Map.put(dep_definitions, dependency, {func, opts})}
   end
 
   @spec apply(t(query)) :: query when query: any()
@@ -83,7 +84,8 @@ defmodule Composite do
         ignore? = Keyword.get(opts, :ignore?, &is_nil/1)
 
         if ignore?.(value) do
-          {query, loaded_deps}
+          on_ignore = Keyword.get(opts, :on_ignore, &Function.identity/1)
+          {on_ignore.(query), loaded_deps}
         else
           required_deps =
             opts

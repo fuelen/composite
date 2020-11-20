@@ -115,5 +115,19 @@ defmodule CompositeTest do
                  )
                )
     end
+
+    test "prepared composite - on_ignore parameter" do
+      composite =
+        Composite.new()
+        |> Composite.param(:order, &order_by(&1, ^&2), on_ignore: &order_by(&1, :name))
+
+      users_query = from(users in "users")
+
+      assert inspect(users_query |> Composite.apply(composite, %{order: :age})) ==
+               inspect(from(users in "users", order_by: [asc: users.age]))
+
+      assert inspect(users_query |> Composite.apply(composite, %{order: nil})) ==
+               inspect(from(users in "users", order_by: [asc: users.name]))
+    end
   end
 end
