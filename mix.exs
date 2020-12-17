@@ -1,15 +1,17 @@
 defmodule Composite.MixProject do
   use Mix.Project
 
+  @version "0.2.1"
   def project do
     [
       app: :composite,
-      version: "0.2.0",
+      version: @version,
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       dialyzer: [plt_add_apps: [:ecto]],
-      package: package()
+      package: package(),
+      docs: docs()
     ]
   end
 
@@ -34,6 +36,14 @@ defmodule Composite.MixProject do
       {:ecto, ">= 1.0.0", optional: true},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.22", only: :dev, runtime: false}
+    ]
+  end
+
+  defp docs do
+    [
+      deps: [ecto: "https://hexdocs.pm/ecto/"],
+      source_url: "https://github.com/fuelen/composite",
+      source_ref: "v#{@version}"
     ]
   end
 end
