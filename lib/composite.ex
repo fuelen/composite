@@ -14,11 +14,11 @@ defmodule Composite do
           | {:on_ignore, (query -> query)}
   @type dependency_option :: {:requires, dependency_name() | [dependency_name()]}
   @type param_path_item :: any()
-  @type apply_param(query) :: (query, any() -> query)
+  @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query)
   @type params :: Access.t()
   @type t(query) :: %__MODULE__{
-          param_definitions: [{[param_path_item()], apply_param(query), [param_option(query)]}],
+          param_definitions: [{[param_path_item()], apply_fun(query), [param_option(query)]}],
           dep_definitions: %{
             optional(dependency_name()) => [{load_dependency(query), [dependency_option()]}]
           },
@@ -94,7 +94,7 @@ defmodule Composite do
       )
 
   """
-  @spec param(t(query), param_path_item() | [param_path_item()], apply_param(query), [
+  @spec param(t(query), param_path_item() | [param_path_item()], apply_fun(query), [
           param_option(query)
         ]) :: t(query)
         when query: any()
@@ -104,7 +104,7 @@ defmodule Composite do
         func,
         opts \\ []
       )
-      when is_function(func, 2) do
+      when is_function(func, 1) or is_function(func, 2) do
     %{composite | param_definitions: [{List.wrap(path), func, opts} | param_definitions]}
   end
 
@@ -190,7 +190,10 @@ defmodule Composite do
           {query, loaded_deps} =
             load_dependencies(query, composite.dep_definitions, loaded_deps, required_deps)
 
-          {func.(query, value), loaded_deps}
+          case func do
+            func when is_function(func, 1) -> {func.(query), loaded_deps}
+            func when is_function(func, 2) -> {func.(query, value), loaded_deps}
+          end
         end
       end)
 

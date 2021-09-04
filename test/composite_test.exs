@@ -9,12 +9,19 @@ defmodule CompositeTest do
 
       query =
         users_query
-        |> Composite.new(%{name: "John"})
+        |> Composite.new(%{name: "John", active: true})
         |> Composite.param(:name, &where(&1, name: ^&2))
+        |> Composite.param(:active, &where(&1, active: true), ignore?: &(!&1))
         |> select([:id, :name])
 
       assert inspect(query) ==
-               inspect(from(users in "users", where: users.name == ^"John", select: [:id, :name]))
+               inspect(
+                 from(users in "users",
+                   where: users.name == ^"John",
+                   where: users.active == true,
+                   select: [:id, :name]
+                 )
+               )
     end
 
     test "prepared composite" do
