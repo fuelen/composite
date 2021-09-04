@@ -105,6 +105,7 @@ defmodule Composite do
         opts \\ []
       )
       when is_function(func, 1) or is_function(func, 2) do
+    ensure_unknown_opts_absent!(opts, [:ignore?, :on_ignore, :requires])
     %{composite | param_definitions: [{List.wrap(path), func, opts} | param_definitions]}
   end
 
@@ -115,16 +116,71 @@ defmodule Composite do
   The same dependency can be required by many parameters, but it will be invoked only once.
   Dependency can depend on other dependency.
 
-  Useful for joining tables via SQL.
+  Useful for joining tables.
 
       User
-      |> Composite.new(%{org_type: :nonprofit, is_org_closed: false})
+      |> Composite.new(%{
+        org_type: :nonprofit,
+        is_org_closed: false,
+        category: :pinned,
+        order: :recent_activity_desc
+      })
       |> Composite.param(:is_org_closed, &where(&1, [orgs: orgs], orgs.closed == ^&2), requires: :orgs)
       |> Composite.param(:org_type, &where(&1, [orgs: orgs], orgs.type == ^&2), requires: :orgs)
+      |> Composite.param(
+        :order,
+        fn
+          query, :inserted_at_desc ->
+            order_by(query, desc: :inserted_at)
+
+          query, :inserted_at_asc ->
+            order_by(query, asc: :inserted_at)
+
+          query, :recent_activity_desc ->
+            order_by(query, [users, recent_activity: recent_activity],
+              desc_nulls_last: recent_activity.inserted_at,
+              desc: users.inserted_at
+            )
+        end,
+        requires: fn
+          :recent_activity_desc -> :recent_activity
+          _ -> nil
+        end
+      )
+      |> Composite.param(
+        :category,
+        fn
+          query, :with_activity ->
+            where(query, [recent_activity: recent_activity], not is_nil(recent_activity.id))
+
+          query, :without_activities ->
+            where(query, [recent_activity: recent_activity], is_nil(recent_activity.id))
+
+          query, :pinned ->
+            where(query, [users], users.pinned)
+        end,
+        requires: fn
+          :pinned -> nil
+          _ -> :recent_activity
+        end
+      )
       |> Composite.dependency(
         :orgs,
         &join(&1, :inner, [users], orgs in assoc(users, :org), as: :orgs)
       )
+      |> Composite.dependency(:recent_activity, fn query ->
+        recent_activity_query =
+          from(activities in Activity,
+            order_by: [desc: activities.inserted_at],
+            distinct: activities.user_id
+          )
+
+        query
+        |> join(:left, [users], recent_activity in subquery(recent_activity_query),
+          on: recent_activity.user_id == users.id,
+          as: :recent_activity
+        )
+      end)
   """
   @spec dependency(t(query), dependency_name(), load_dependency(query), [dependency_option]) ::
           t(query)
@@ -136,6 +192,7 @@ defmodule Composite do
         opts \\ []
       )
       when is_function(func, 1) do
+    ensure_unknown_opts_absent!(opts, [:requires])
     %{composite | dep_definitions: Map.put(dep_definitions, dependency, {func, opts})}
   end
 
@@ -198,6 +255,21 @@ defmodule Composite do
       end)
 
     query
+  end
+
+  defp ensure_unknown_opts_absent!([], _allowlist), do: :ok
+
+  defp ensure_unknown_opts_absent!(opts, allowlist) do
+    diff =
+      MapSet.difference(
+        MapSet.new(Keyword.keys(opts)),
+        MapSet.new(allowlist)
+      )
+
+    case MapSet.to_list(diff) do
+      [] -> :ok
+      unknown_keys -> raise ArgumentError, "unsupported options: #{inspect(unknown_keys)}"
+    end
   end
 
   defp set_once!(composite, key, value) do

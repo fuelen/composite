@@ -137,4 +137,16 @@ defmodule CompositeTest do
                inspect(from(users in "users", order_by: [asc: users.name]))
     end
   end
+
+  test "unknown options" do
+    assert_raise ArgumentError, fn ->
+      Composite.new()
+      |> Composite.param(:order, &order_by(&1, ^&2), onignore: &order_by(&1, :name))
+    end
+
+    assert_raise ArgumentError, fn ->
+      Composite.new()
+      |> Composite.param(:order, &order_by(&1, ^&2), ignore: fn _ -> true end)
+    end
+  end
 end
