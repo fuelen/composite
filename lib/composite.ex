@@ -125,7 +125,8 @@ defmodule Composite do
 
   ### Options
 
-  * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied. Defaults to `is_nil/1`.
+  * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied.
+  Default value is `&(&1 in [nil, "", [], %{}])`.
   * `:on_ignore` - a function that will be applied instead of `t:apply_fun/1` if value is ignored.
   Defaults to `Function.identity/1`.
   * `:requires` - points to the dependencies which has to be loaded before calling `t:apply_fun/1`.
@@ -236,7 +237,7 @@ defmodule Composite do
                                                                {query, loaded_deps} ->
         value = get_in(composite.params, path)
 
-        ignore? = Keyword.get(opts, :ignore?, &is_nil/1)
+        ignore? = Keyword.get(opts, :ignore?, &empty_value?/1)
 
         if ignore?.(value) do
           on_ignore = Keyword.get(opts, :on_ignore, &Function.identity/1)
@@ -262,6 +263,10 @@ defmodule Composite do
       end)
 
     query
+  end
+
+  defp empty_value?(value) do
+    value in [nil, "", [], %{}]
   end
 
   defp ensure_unknown_opts_absent!([], _allowlist), do: :ok
