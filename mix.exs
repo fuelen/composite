@@ -41,6 +41,7 @@ defmodule Composite.MixProject do
 
   defp docs do
     [
+      main: "Composite",
       deps: [ecto: "https://hexdocs.pm/ecto/"],
       source_url: "https://github.com/fuelen/composite",
       source_ref: "v#{@version}"

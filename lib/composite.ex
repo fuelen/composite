@@ -1,13 +1,33 @@
 defmodule Composite do
   @moduledoc """
-  A utility for writing composable queries.
+  A utility for writing dynamic queries.
+
+  It allows getting rid of some boilerplate when building a query based on input parameters.
+
+      params = %{query_string: "John Doe"}
+
+      User
+      |> where(active: true)
+      |> Composite.new(params)
+      |> Composite.param(:org_id, &filter_by_org_id/2)
+      |> Composite.param(:search_query, &search_by_full_name/2)
+      |> Composite.param(:org_name, &filter_by_org_name/2, requires: :org)
+      |> Composite.param(:org_type, &filter_by_org_type/2, requires: :org)
+      |> Composite.dependency(:org, &join_orgs/1)
+      |> Repo.all()
+
+  Even though most of the examples in this doc use `Ecto`, Composite itself is not limited only to it.
+  `Ecto` is an optional dependency and it is present only for having an implementation of `Ecto.Queryable` OOTB.
+  You're able to use Composite with any Elixir term, as it is just an advanced wrapper around `Enum.reduce/3`.
   """
   import Kernel, except: [apply: 3]
   defstruct param_definitions: [], dep_definitions: %{}, params: nil, input_query: nil
+
   @type dependency_name :: atom()
   @type param_option(query) ::
           {:requires,
-           dependency_name()
+           nil
+           | dependency_name()
            | [dependency_name()]
            | (value :: any -> nil | dependency_name() | [dependency_name()])}
           | {:ignore?, (any() -> boolean())}
@@ -79,8 +99,10 @@ defmodule Composite do
   If the parameter requires dependencies, then they will be loaded before the parameters' handler and only if
   parameter wasn't ignored. Examples with dependencies usage can be found in doc for `dependency/4`
 
+      params = %{location: "Arctic", order: :age_desc}
+
       User
-      |> Composite.new(%{location: "Arctic", order: :age_desc})
+      |> Composite.new(params)
       |> Composite.param(:location, &where(&1, location: ^&2),
         ignore?: &(&1 in [nil, "WORLDWIDE", ""])
       )
@@ -93,6 +115,23 @@ defmodule Composite do
         on_ignore: &order_by(&1, inserted_at: :desc)
       )
 
+  If input parameters have nested maps (or any other key-based data structure):
+
+      params = %{filter: %{name: "John"}}
+
+      User
+      |> Composite.new(params)
+      |> Composite.param([:filter, :name], &where(&1, name: ^&2))
+
+  ### Options
+
+  * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied. Defaults to `is_nil/1`.
+  * `:on_ignore` - a function that will be applied instead of `t:apply_fun/1` if value is ignored.
+  Defaults to `Function.identity/1`.
+  * `:requires` - points to the dependencies which has to be loaded before calling `t:apply_fun/1`.
+  It is, also, possible to specify dependencies dynamically based on a value of the parameter by
+  passing a function. The latter function will always receive not ignored values.
+  Defaults to `nil` (which is equivalent to `[]`).
   """
   @spec param(t(query), param_path_item() | [param_path_item()], apply_fun(query), [
           param_option(query)
@@ -118,69 +157,34 @@ defmodule Composite do
 
   Useful for joining tables.
 
+      params = %{org_type: :nonprofit, is_org_closed: false}
+
       User
-      |> Composite.new(%{
-        org_type: :nonprofit,
-        is_org_closed: false,
-        category: :pinned,
-        order: :recent_activity_desc
-      })
+      |> Composite.new(params)
       |> Composite.param(:is_org_closed, &where(&1, [orgs: orgs], orgs.closed == ^&2), requires: :orgs)
       |> Composite.param(:org_type, &where(&1, [orgs: orgs], orgs.type == ^&2), requires: :orgs)
+      |> Composite.dependency(:orgs, &join(&1, :inner, [users], orgs in assoc(users, :org), as: :orgs))
+
+  It is also possible to require a dependency only if specific value is set. In example below dependency `:phone` will be
+  loaded only if value of `:search` param starts from `+` sign
+
+      composite
       |> Composite.param(
-        :order,
+        :search,
         fn
-          query, :inserted_at_desc ->
-            order_by(query, desc: :inserted_at)
-
-          query, :inserted_at_asc ->
-            order_by(query, asc: :inserted_at)
-
-          query, :recent_activity_desc ->
-            order_by(query, [users, recent_activity: recent_activity],
-              desc_nulls_last: recent_activity.inserted_at,
-              desc: users.inserted_at
-            )
+          query, "+" <> _ = phone_number -> where(query, [phones: phones] phones.number == ^phone_number)
+          query, query_string -> where(query, [records], ilike(records.text, ^query_string))
         end,
         requires: fn
-          :recent_activity_desc -> :recent_activity
+          "+" <> _ -> :phone
           _ -> nil
         end
       )
-      |> Composite.param(
-        :category,
-        fn
-          query, :with_activity ->
-            where(query, [recent_activity: recent_activity], not is_nil(recent_activity.id))
+      |> Composite.dependency(:phone, &join(&1, :inner, [records], phones in assoc(records, :phone), as: :phones))
 
-          query, :without_activities ->
-            where(query, [recent_activity: recent_activity], is_nil(recent_activity.id))
+  ### Options
 
-          query, :pinned ->
-            where(query, [users], users.pinned)
-        end,
-        requires: fn
-          :pinned -> nil
-          _ -> :recent_activity
-        end
-      )
-      |> Composite.dependency(
-        :orgs,
-        &join(&1, :inner, [users], orgs in assoc(users, :org), as: :orgs)
-      )
-      |> Composite.dependency(:recent_activity, fn query ->
-        recent_activity_query =
-          from(activities in Activity,
-            order_by: [desc: activities.inserted_at],
-            distinct: activities.user_id
-          )
-
-        query
-        |> join(:left, [users], recent_activity in subquery(recent_activity_query),
-          on: recent_activity.user_id == users.id,
-          as: :recent_activity
-        )
-      end)
+  * `:requires` - allows to set dependencies for current dependency.
   """
   @spec dependency(t(query), dependency_name(), load_dependency(query), [dependency_option]) ::
           t(query)
@@ -199,7 +203,10 @@ defmodule Composite do
   @doc """
   Applies handlers to query.
 
-  Used when composite is defined with `new/2`
+  Used when composite is defined with `new/2`.
+
+  If used with `Ecto`, then calling this function is not necessary,
+  as `Composite` implements `Ecto.Queryable` protocol, so applying will be done automatically when it is needed.
   """
   @spec apply(t(query)) :: query when query: any()
   def apply(%__MODULE__{} = composite) do
