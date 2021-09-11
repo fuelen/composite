@@ -1,7 +1,7 @@
 defmodule Composite.MixProject do
   use Mix.Project
 
-  @version "0.2.1"
+  @version "0.3.0"
   def project do
     [
       app: :composite,
@@ -23,7 +23,7 @@ defmodule Composite.MixProject do
 
   def package do
     [
-      description: "A library that allows writing composable queries",
+      description: "A utility for writing dynamic queries.",
       licenses: ["Apache 2"],
       links: %{
         GitHub: "https://github.com/fuelen/composite"

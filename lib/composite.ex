@@ -24,15 +24,16 @@ defmodule Composite do
   defstruct param_definitions: [], dep_definitions: %{}, params: nil, input_query: nil
 
   @type dependency_name :: atom()
+  @type dependencies ::
+          nil
+          | dependency_name()
+          | [dependency_name()]
   @type param_option(query) ::
-          {:requires,
-           nil
-           | dependency_name()
-           | [dependency_name()]
-           | (value :: any -> nil | dependency_name() | [dependency_name()])}
+          {:requires, dependencies() | (value :: any -> dependencies())}
           | {:ignore?, (any() -> boolean())}
           | {:on_ignore, (query -> query)}
-  @type dependency_option :: {:requires, dependency_name() | [dependency_name()]}
+          | {:ignore_requires, dependencies()}
+  @type dependency_option :: {:requires, dependencies()}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query)
@@ -133,6 +134,8 @@ defmodule Composite do
   It is, also, possible to specify dependencies dynamically based on a value of the parameter by
   passing a function. The latter function will always receive not ignored values.
   Defaults to `nil` (which is equivalent to `[]`).
+  * `:ignore_requires` - points to the dependencies which has to be loaded when value is ignored. May be needed
+  for custom `:on_ignore` implementation.
   """
   @spec param(t(query), param_path_item() | [param_path_item()], apply_fun(query), [
           param_option(query)
@@ -145,7 +148,7 @@ defmodule Composite do
         opts \\ []
       )
       when is_function(func, 1) or is_function(func, 2) do
-    ensure_unknown_opts_absent!(opts, [:ignore?, :on_ignore, :requires])
+    ensure_unknown_opts_absent!(opts, [:ignore?, :on_ignore, :requires, :ignore_requires])
     %{composite | param_definitions: [{List.wrap(path), func, opts} | param_definitions]}
   end
 
@@ -240,7 +243,17 @@ defmodule Composite do
         ignore? = Keyword.get(opts, :ignore?, &empty_value?/1)
 
         if ignore?.(value) do
-          on_ignore = Keyword.get(opts, :on_ignore, &Function.identity/1)
+          on_ignore =
+            case Keyword.fetch(opts, :on_ignore) do
+              {:ok, on_ignore} when is_function(on_ignore, 1) -> on_ignore
+              :error -> &Function.identity/1
+            end
+
+          required_deps = opts |> Keyword.get(:ignore_requires) |> List.wrap()
+
+          {query, loaded_deps} =
+            load_dependencies(query, composite.dep_definitions, loaded_deps, required_deps)
+
           {on_ignore.(query), loaded_deps}
         else
           required_deps =
@@ -291,6 +304,10 @@ defmodule Composite do
       {_, nil} -> Map.replace!(composite, key, value)
       {_, _} -> raise "#{inspect(key)} has already been provided"
     end
+  end
+
+  defp load_dependencies(query, _deps_definitions, loaded_deps, [] = _required_deps) do
+    {query, loaded_deps}
   end
 
   defp load_dependencies(query, deps_definitions, loaded_deps, required_deps) do
