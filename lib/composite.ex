@@ -4,7 +4,7 @@ defmodule Composite do
 
   It allows getting rid of some boilerplate when building a query based on input parameters.
 
-      params = %{query_string: "John Doe"}
+      params = %{search_query: "John Doe"}
 
       User
       |> where(active: true)
@@ -21,7 +21,12 @@ defmodule Composite do
   You're able to use Composite with any Elixir term, as it is just an advanced wrapper around `Enum.reduce/3`.
   """
   import Kernel, except: [apply: 3]
-  defstruct param_definitions: [], dep_definitions: %{}, params: nil, input_query: nil
+
+  defstruct param_definitions: [],
+            dep_definitions: %{},
+            params: nil,
+            input_query: nil,
+            required_deps: []
 
   @type dependency_name :: atom()
   @type dependencies ::
@@ -36,14 +41,15 @@ defmodule Composite do
   @type dependency_option :: {:requires, dependencies()}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
-  @type load_dependency(query) :: (query -> query)
+  @type load_dependency(query) :: (query -> query) | (query, params() -> query)
   @type params :: Access.t()
   @type t(query) :: %__MODULE__{
           param_definitions: [{[param_path_item()], apply_fun(query), [param_option(query)]}],
           dep_definitions: %{
             optional(dependency_name()) => [{load_dependency(query), [dependency_option()]}]
           },
-          params: params(),
+          required_deps: [dependency_name()],
+          params: params() | nil,
           input_query: query
         }
 
@@ -176,7 +182,7 @@ defmodule Composite do
       |> Composite.param(
         :search,
         fn
-          query, "+" <> _ = phone_number -> where(query, [phones: phones] phones.number == ^phone_number)
+          query, "+" <> _ = phone_number -> where(query, [phones: phones], phones.number == ^phone_number)
           query, query_string -> where(query, [records], ilike(records.text, ^query_string))
         end,
         requires: fn
@@ -185,6 +191,8 @@ defmodule Composite do
         end
       )
       |> Composite.dependency(:phone, &join(&1, :inner, [records], phones in assoc(records, :phone), as: :phones))
+
+  When `loader` function has arity 2, then all parameters are passed in the second argument.
 
   ### Options
 
@@ -199,7 +207,7 @@ defmodule Composite do
         func,
         opts \\ []
       )
-      when is_function(func, 1) do
+      when is_function(func, 1) or is_function(func, 2) do
     ensure_unknown_opts_absent!(opts, [:requires])
     %{composite | dep_definitions: Map.put(dep_definitions, dependency, {func, opts})}
   end
@@ -233,11 +241,19 @@ defmodule Composite do
       |> set_once!(:input_query, input_query)
       |> set_once!(:params, params)
 
+    {query, loaded_deps} =
+      load_dependencies(
+        composite.input_query,
+        composite.params,
+        composite.dep_definitions,
+        MapSet.new(),
+        composite.required_deps
+      )
+
     {query, _loaded_deps} =
       composite.param_definitions
       |> Enum.reverse()
-      |> Enum.reduce({composite.input_query, MapSet.new()}, fn {path, func, opts},
-                                                               {query, loaded_deps} ->
+      |> Enum.reduce({query, loaded_deps}, fn {path, func, opts}, {query, loaded_deps} ->
         value = get_in(composite.params, path)
 
         ignore? = Keyword.get(opts, :ignore?, &empty_value?/1)
@@ -252,7 +268,13 @@ defmodule Composite do
           required_deps = opts |> Keyword.get(:ignore_requires) |> List.wrap()
 
           {query, loaded_deps} =
-            load_dependencies(query, composite.dep_definitions, loaded_deps, required_deps)
+            load_dependencies(
+              query,
+              composite.params,
+              composite.dep_definitions,
+              loaded_deps,
+              required_deps
+            )
 
           {on_ignore.(query), loaded_deps}
         else
@@ -266,7 +288,13 @@ defmodule Composite do
             |> List.wrap()
 
           {query, loaded_deps} =
-            load_dependencies(query, composite.dep_definitions, loaded_deps, required_deps)
+            load_dependencies(
+              query,
+              composite.params,
+              composite.dep_definitions,
+              loaded_deps,
+              required_deps
+            )
 
           case func do
             func when is_function(func, 1) -> {func.(query), loaded_deps}
@@ -276,6 +304,19 @@ defmodule Composite do
       end)
 
     query
+  end
+
+  @doc """
+  Forces loading dependency even if it is not required by `params`.
+  """
+  @spec force_require(t(query), dependency_name() | [dependency_name()]) :: t(query)
+        when query: any()
+  def force_require(
+        %__MODULE__{required_deps: required_deps} = composite,
+        dependency_or_dependencies
+      ) do
+    dependencies = List.wrap(dependency_or_dependencies)
+    %__MODULE__{composite | required_deps: dependencies ++ required_deps}
   end
 
   defp empty_value?(value) do
@@ -306,11 +347,11 @@ defmodule Composite do
     end
   end
 
-  defp load_dependencies(query, _deps_definitions, loaded_deps, [] = _required_deps) do
+  defp load_dependencies(query, _params, _deps_definitions, loaded_deps, [] = _required_deps) do
     {query, loaded_deps}
   end
 
-  defp load_dependencies(query, deps_definitions, loaded_deps, required_deps) do
+  defp load_dependencies(query, params, deps_definitions, loaded_deps, required_deps) do
     deps_to_load = required_deps |> MapSet.new() |> MapSet.difference(loaded_deps)
 
     {query, loaded_deps} =
@@ -327,9 +368,15 @@ defmodule Composite do
         required_deps = opts |> Keyword.get(:requires) |> List.wrap()
 
         {query, loaded_deps} =
-          query |> load_dependencies(deps_definitions, loaded_deps, required_deps)
+          load_dependencies(query, params, deps_definitions, loaded_deps, required_deps)
 
-        {loader.(query), loaded_deps}
+        query =
+          case loader do
+            loader when is_function(loader, 1) -> loader.(query)
+            loader when is_function(loader, 2) -> loader.(query, params)
+          end
+
+        {query, loaded_deps}
       end)
 
     {query, MapSet.union(loaded_deps, deps_to_load)}
