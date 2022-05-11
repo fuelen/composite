@@ -138,6 +138,18 @@ defmodule CompositeTest do
     end
   end
 
+  test "dependencies" do
+    assert []
+           |> Composite.new(%{search: "text"})
+           |> Composite.param(:search, fn query, _value -> [:search | query] end,
+             requires: [:a, :b]
+           )
+           |> Composite.dependency(:a, &[:a | &1], requires: :b)
+           |> Composite.dependency(:b, &[:b | &1])
+           |> Composite.apply() ==
+             [:search, :a, :b]
+  end
+
   test "unknown options" do
     assert_raise ArgumentError, fn ->
       Composite.new()

@@ -356,27 +356,31 @@ defmodule Composite do
 
     {query, loaded_deps} =
       Enum.reduce(deps_to_load, {query, loaded_deps}, fn dependency_name, {query, loaded_deps} ->
-        {loader, opts} =
-          case Map.fetch(deps_definitions, dependency_name) do
-            {:ok, result} ->
-              result
+        if dependency_name in loaded_deps do
+          {query, loaded_deps}
+        else
+          {loader, opts} =
+            case Map.fetch(deps_definitions, dependency_name) do
+              {:ok, result} ->
+                result
 
-            :error ->
-              raise "unable to load dependency `#{dependency_name}`"
-          end
+              :error ->
+                raise "unable to load dependency `#{dependency_name}`"
+            end
 
-        required_deps = opts |> Keyword.get(:requires) |> List.wrap()
+          required_deps = opts |> Keyword.get(:requires) |> List.wrap()
 
-        {query, loaded_deps} =
-          load_dependencies(query, params, deps_definitions, loaded_deps, required_deps)
+          {query, loaded_deps} =
+            load_dependencies(query, params, deps_definitions, loaded_deps, required_deps)
 
-        query =
-          case loader do
-            loader when is_function(loader, 1) -> loader.(query)
-            loader when is_function(loader, 2) -> loader.(query, params)
-          end
+          query =
+            case loader do
+              loader when is_function(loader, 1) -> loader.(query)
+              loader when is_function(loader, 2) -> loader.(query, params)
+            end
 
-        {query, loaded_deps}
+          {query, loaded_deps}
+        end
       end)
 
     {query, MapSet.union(loaded_deps, deps_to_load)}
