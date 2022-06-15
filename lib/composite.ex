@@ -389,7 +389,10 @@ defmodule Composite do
   if Code.ensure_loaded?(Ecto.Queryable) do
     defimpl Ecto.Queryable do
       def to_query(composite) do
-        Composite.apply(composite)
+        case Composite.apply(composite) do
+          %Ecto.Query{} = query -> query
+          other -> Ecto.Queryable.to_query(other)
+        end
       end
     end
   end
