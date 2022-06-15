@@ -9,7 +9,7 @@ adding `composite` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:composite, "~> 0.3"}
+    {:composite, "~> 0.4"}
   ]
 end
 ```
