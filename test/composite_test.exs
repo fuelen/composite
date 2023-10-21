@@ -11,7 +11,7 @@ defmodule CompositeTest do
         users_query
         |> Composite.new(%{name: "John", active: true})
         |> Composite.param(:name, &where(&1, name: ^&2))
-        |> Composite.param(:active, &where(&1, active: true), ignore?: &(!&1))
+        |> Composite.param(:active, &where(&1, active: true))
         |> select([:id, :name])
 
       assert inspect(query) ==
@@ -138,7 +138,7 @@ defmodule CompositeTest do
     end
   end
 
-  test "dependencies" do
+  test "dependencies resolution" do
     assert []
            |> Composite.new(%{search: "text"})
            |> Composite.param(:search, fn query, _value -> [:search | query] end,
@@ -150,15 +150,83 @@ defmodule CompositeTest do
              [:search, :a, :b]
   end
 
+  test "dependency resolver with arity 2 accepts params as a second arg" do
+    assert []
+           |> Composite.new(%{search: "text"})
+           |> Composite.param(:search, &[:search | &1], requires: [:a])
+           |> Composite.dependency(:a, &[{:a, &2} | &1])
+           |> Composite.apply() == [:search, {:a, %{search: "text"}}]
+  end
+
+  test "force require" do
+    assert []
+           |> Composite.new(%{})
+           |> Composite.param(:search, &[:search | &1], requires: [:a])
+           |> Composite.dependency(:a, &[:a | &1])
+           |> Composite.force_require(:a)
+           |> Composite.apply() == [:a]
+  end
+
+  test "using undefined dependency" do
+    assert_raise ArgumentError,
+                 "Unknown dependency: `something`. Please declare this dependency using Composite.dependency/4",
+                 fn ->
+                   []
+                   |> Composite.new(%{search: "text"})
+                   |> Composite.param(:search, &[:search | &1], requires: :something)
+                   |> Composite.apply()
+                 end
+  end
+
+  test "set params multiple times" do
+    assert_raise ArgumentError, ":params has already been provided", fn ->
+      query = []
+      composite = Composite.new(nil, %{})
+      Composite.apply(query, composite, %{})
+    end
+  end
+
+  test "set query multiple times" do
+    assert_raise ArgumentError, ":input_query has already been provided", fn ->
+      query = []
+      composite = Composite.new(query, %{})
+      Composite.apply(query, composite, %{})
+    end
+  end
+
+  test ":input_query is not set" do
+    assert_raise ArgumentError, ":input_query is not set", fn ->
+      nil
+      |> Composite.new(%{})
+      |> Composite.apply()
+    end
+  end
+
+  test ":params is not set" do
+    assert_raise ArgumentError, ":params is not set", fn ->
+      []
+      |> Composite.new(nil)
+      |> Composite.apply()
+    end
+  end
+
   test "unknown options" do
-    assert_raise ArgumentError, fn ->
+    assert_raise ArgumentError, "Unsupported options: [:onignore]", fn ->
       Composite.new()
       |> Composite.param(:order, &order_by(&1, ^&2), onignore: &order_by(&1, :name))
     end
 
-    assert_raise ArgumentError, fn ->
+    assert_raise ArgumentError, "Unsupported options: [:ignore]", fn ->
       Composite.new()
       |> Composite.param(:order, &order_by(&1, ^&2), ignore: fn _ -> true end)
     end
+  end
+
+  test "recursively apply Ecto.Queryable.to_query to input query" do
+    assert "users"
+           |> Composite.new(%{})
+           |> Composite.param(:name, &where(&1, name: ^&2))
+           |> Ecto.Queryable.to_query()
+           |> inspect() == inspect(from(users in "users"))
   end
 end

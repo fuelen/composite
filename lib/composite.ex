@@ -334,16 +334,16 @@ defmodule Composite do
 
     case MapSet.to_list(diff) do
       [] -> :ok
-      unknown_keys -> raise ArgumentError, "unsupported options: #{inspect(unknown_keys)}"
+      unknown_keys -> raise ArgumentError, "Unsupported options: #{inspect(unknown_keys)}"
     end
   end
 
   defp set_once!(composite, key, value) do
     case {value, Map.fetch!(composite, key)} do
-      {nil, nil} -> raise "#{inspect(key)} is not set"
+      {nil, nil} -> raise ArgumentError, "#{inspect(key)} is not set"
       {nil, _} -> composite
       {_, nil} -> Map.replace!(composite, key, value)
-      {_, _} -> raise "#{inspect(key)} has already been provided"
+      {_, _} -> raise ArgumentError, "#{inspect(key)} has already been provided"
     end
   end
 
@@ -365,7 +365,8 @@ defmodule Composite do
                 result
 
               :error ->
-                raise "unable to load dependency `#{dependency_name}`"
+                raise ArgumentError,
+                      "Unknown dependency: `#{dependency_name}`. Please declare this dependency using Composite.dependency/4"
             end
 
           required_deps = opts |> Keyword.get(:requires) |> List.wrap()
