@@ -41,7 +41,8 @@ defmodule Composite.MixProject do
 
   defp docs do
     [
-      main: "Composite",
+      main: "readme",
+      extras: ["README.md": [title: "README"]],
       deps: [ecto: "https://hexdocs.pm/ecto/"],
       source_url: "https://github.com/fuelen/composite",
       source_ref: "v#{@version}"
