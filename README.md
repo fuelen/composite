@@ -63,7 +63,7 @@ def list_users(params) do
 end
 ```
 
-Let's move details to anonymous functions, so it doesn't look so scary:
+Let's move anonymous functions to named functions, so it doesn't look so scary:
 ```elixir
 def list_users(params) do
   MyApp.User
