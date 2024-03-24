@@ -15,6 +15,7 @@ end
 Docs can be found at [https://hexdocs.pm/composite](https://hexdocs.pm/composite).
 
 ## About
+
 Composite is a versatile utility library for building dynamic queries in Elixir. It simplifies the process of
 constructing complex queries based on input parameters, making your code more concise and readable. While the library
 was with Ecto in mind, it can be used with any Elixir term, as it's essentially an advanced wrapper around Enum.reduce/3.
@@ -99,3 +100,7 @@ Dependencies can be declared with `Composite.dependency/3` and `Composite.depend
 The loader function is invoked before invoking parameter handler.
 Dependencies can have other dependencies as well. Dependencies are loaded only when they're needed and only once.
 So, if multiple parameter handlers require the same table to be joined to the query, it will be joined only once without any errors.
+
+## Links
+
+* Article: [Writing dynamic Ecto queries with Composite](https://dev.to/arturplysiuk/writing-dynamic-ecto-queries-with-composite-26g4)

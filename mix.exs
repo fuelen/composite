@@ -26,7 +26,9 @@ defmodule Composite.MixProject do
       description: "A utility for writing dynamic queries.",
       licenses: ["Apache-2.0"],
       links: %{
-        GitHub: "https://github.com/fuelen/composite"
+        "GitHub" => "https://github.com/fuelen/composite",
+        "Article: Writing dynamic Ecto queries with Composite" =>
+          "https://dev.to/arturplysiuk/writing-dynamic-ecto-queries-with-composite-26g4"
       }
     ]
   end
