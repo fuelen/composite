@@ -240,6 +240,7 @@ defmodule Composite do
       composite
       |> set_once!(:input_query, input_query)
       |> set_once!(:params, params)
+      |> ensure_params_are_valid()
 
     {query, loaded_deps} =
       load_dependencies(
@@ -385,6 +386,19 @@ defmodule Composite do
       end)
 
     {query, MapSet.union(loaded_deps, deps_to_load)}
+  end
+
+  defp ensure_params_are_valid(composite) do
+    diff =
+      MapSet.difference(
+        MapSet.new(Map.keys(composite.params)),
+        MapSet.new(composite.param_definitions |> Enum.map(&elem(&1, 0)) |> List.flatten())
+      )
+
+    case MapSet.size(diff) do
+      0 -> composite
+      _ -> raise ArgumentError, "Unknown params: #{inspect(MapSet.to_list(diff))}"
+    end
   end
 
   if Code.ensure_loaded?(Ecto.Queryable) do
