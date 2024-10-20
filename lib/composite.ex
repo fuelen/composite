@@ -39,6 +39,7 @@ defmodule Composite do
           | {:on_ignore, (query -> query)}
           | {:ignore_requires, dependencies()}
   @type dependency_option :: {:requires, dependencies()}
+  @type new_option :: {:strict, boolean()}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query) | (query, params() -> query)
@@ -70,8 +71,10 @@ defmodule Composite do
       |> Composite.apply(composite, params)
       |> Repo.all()
   """
-  @spec new :: t(any())
-  def new, do: %__MODULE__{}
+  @spec new([new_option]) :: t(any())
+  def new(opts \\ []) do
+    %__MODULE__{strict: Keyword.get(opts, :strict, false)}
+  end
 
   @doc """
   Initializes a `Composite` struct with `query` and `params`.
@@ -91,10 +94,19 @@ defmodule Composite do
 
   Please note, that there is no explicit `Composite.apply/1` call before `Repo.all/1`, because `Composite`
   implements `Ecto.Queryable` protocol.
+
+  ### Options
+
+  * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
+  Defaults to `false`.
   """
-  @spec new(query, params()) :: t(query) when query: any()
-  def new(input_query, params) do
-    %__MODULE__{params: params, input_query: input_query}
+  @spec new(query, params(), [new_option]) :: t(query) when query: any()
+  def new(input_query, params, opts \\ []) do
+    %__MODULE__{
+      params: params,
+      input_query: input_query,
+      strict: Keyword.get(opts, :strict, false)
+    }
   end
 
   @doc """
@@ -240,6 +252,7 @@ defmodule Composite do
       composite
       |> set_once!(:input_query, input_query)
       |> set_once!(:params, params)
+      |> maybe_raise_on_unknown_params()
 
     {query, loaded_deps} =
       load_dependencies(
@@ -386,6 +399,21 @@ defmodule Composite do
 
     {query, MapSet.union(loaded_deps, deps_to_load)}
   end
+
+  defp maybe_raise_on_unknown_params(%__MODULE__{strict: true} = composite) do
+    diff =
+      MapSet.difference(
+        MapSet.new(Map.keys(composite.params)),
+        MapSet.new(composite.param_definitions |> Enum.map(&elem(&1, 0)) |> List.flatten())
+      )
+
+    case MapSet.size(diff) do
+      0 -> composite
+      _ -> raise ArgumentError, "Unknown params: #{inspect(MapSet.to_list(diff))}"
+    end
+  end
+
+  defp maybe_raise_on_unknown_params(composite), do: composite
 
   if Code.ensure_loaded?(Ecto.Queryable) do
     defimpl Ecto.Queryable do
