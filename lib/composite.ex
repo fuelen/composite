@@ -26,7 +26,8 @@ defmodule Composite do
             dep_definitions: %{},
             params: nil,
             input_query: nil,
-            required_deps: []
+            required_deps: [],
+            strict: false
 
   @type dependency_name :: atom()
   @type dependencies ::
@@ -70,6 +71,11 @@ defmodule Composite do
       |> where(active: true)
       |> Composite.apply(composite, params)
       |> Repo.all()
+
+  ### Options
+
+  * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
+  Defaults to `false`.
   """
   @spec new([new_option]) :: t(any())
   def new(opts \\ []) do
