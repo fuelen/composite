@@ -258,7 +258,8 @@ defmodule Composite do
       composite
       |> set_once!(:input_query, input_query)
       |> set_once!(:params, params)
-      |> maybe_raise_on_unknown_params()
+
+    maybe_raise_on_unknown_params(composite)
 
     {query, loaded_deps} =
       load_dependencies(
@@ -419,15 +420,15 @@ defmodule Composite do
         )
 
       case MapSet.size(diff) do
-        0 -> composite
+        0 -> :noop
         _ -> raise ArgumentError, "Unknown params: #{inspect(MapSet.to_list(diff))}"
       end
     else
-      composite
+      :noop
     end
   end
 
-  defp maybe_raise_on_unknown_params(composite), do: composite
+  defp maybe_raise_on_unknown_params(_composite), do: :noop
 
   if Code.ensure_loaded?(Ecto.Queryable) do
     defimpl Ecto.Queryable do
