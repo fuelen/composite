@@ -406,20 +406,30 @@ defmodule Composite do
     {query, MapSet.union(loaded_deps, deps_to_load)}
   end
 
-  defp maybe_raise_on_unknown_params(%__MODULE__{strict: true} = composite) do
-    diff =
-      MapSet.difference(
-        MapSet.new(Map.keys(composite.params)),
-        MapSet.new(composite.param_definitions |> Enum.map(&elem(&1, 0)) |> List.flatten())
-      )
+  defp maybe_raise_on_unknown_params(%__MODULE__{strict: true, params: params} = composite) do
+    if (is_map(params) and not is_struct(params)) or Keyword.keyword?(params) do
+      diff =
+        MapSet.difference(
+          MapSet.new(collect_keys(params)),
+          MapSet.new(composite.param_definitions |> Enum.map(&elem(&1, 0)))
+        )
 
-    case MapSet.size(diff) do
-      0 -> composite
-      _ -> raise ArgumentError, "Unknown params: #{inspect(MapSet.to_list(diff))}"
+      case MapSet.size(diff) do
+        0 -> composite
+        _ -> raise ArgumentError, "Unknown params: #{inspect(MapSet.to_list(diff))}"
+      end
+    else
+      composite
     end
   end
 
   defp maybe_raise_on_unknown_params(composite), do: composite
+
+  defp collect_keys(data, path \\ []) do
+    Enum.flat_map(data, fn {k, v} ->
+      collect_keys(v, path ++ [k])
+    end)
+  end
 
   if Code.ensure_loaded?(Ecto.Queryable) do
     defimpl Ecto.Queryable do
