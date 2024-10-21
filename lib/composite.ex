@@ -410,8 +410,12 @@ defmodule Composite do
     if (is_map(params) and not is_struct(params)) or Keyword.keyword?(params) do
       diff =
         MapSet.difference(
-          MapSet.new(collect_keys(params)),
-          MapSet.new(composite.param_definitions |> Enum.map(&elem(&1, 0)))
+          MapSet.new(Enum.map(params, &elem(&1, 0))),
+          MapSet.new(
+            composite.param_definitions
+            |> Enum.map(&elem(&1, 0))
+            |> Enum.map(&List.first/1)
+          )
         )
 
       case MapSet.size(diff) do
@@ -424,12 +428,6 @@ defmodule Composite do
   end
 
   defp maybe_raise_on_unknown_params(composite), do: composite
-
-  defp collect_keys(data, path \\ []) do
-    Enum.flat_map(data, fn {k, v} ->
-      collect_keys(v, path ++ [k])
-    end)
-  end
 
   if Code.ensure_loaded?(Ecto.Queryable) do
     defimpl Ecto.Queryable do
