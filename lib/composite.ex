@@ -40,7 +40,7 @@ defmodule Composite do
           | {:on_ignore, (query -> query)}
           | {:ignore_requires, dependencies()}
   @type dependency_option :: {:requires, dependencies()}
-  @type new_option :: {:strict, boolean()}
+  @type option :: {:strict, boolean()}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query) | (query, params() -> query)
@@ -77,7 +77,7 @@ defmodule Composite do
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
   """
-  @spec new([new_option]) :: t(any())
+  @spec new([option]) :: t(any())
   def new(opts \\ []) do
     %__MODULE__{strict: Keyword.get(opts, :strict, false)}
   end
@@ -106,7 +106,7 @@ defmodule Composite do
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
   """
-  @spec new(query, params(), [new_option]) :: t(query) when query: any()
+  @spec new(query, params(), [option]) :: t(query) when query: any()
   def new(input_query, params, opts \\ []) do
     %__MODULE__{
       params: params,
