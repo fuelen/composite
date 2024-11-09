@@ -222,6 +222,29 @@ defmodule CompositeTest do
     end
   end
 
+  test "unknown params when strict option is true" do
+    composite =
+      [strict: true]
+      |> Composite.new()
+      |> Composite.param(:name, &Map.put(&1, :name, &2))
+      |> Composite.param([:company, :name], &Map.put(&1, :company_name, &2))
+      |> Composite.param([:company, :type], &Map.put(&1, :company_type, &2))
+
+    assert_raise ArgumentError,
+                 "Unknown parameters found under the following paths: [:company, :service]",
+                 fn ->
+                   Composite.apply(%{}, composite, %{company: %{name: "Pear", service: "IT"}})
+                 end
+
+    assert_raise ArgumentError,
+                 "Unknown parameters found under the following paths: [:companies]",
+                 fn -> Composite.apply(%{}, composite, %{companies: %{}}) end
+
+    assert_raise ArgumentError,
+                 "Unknown parameters found under the following paths: [:names]",
+                 fn -> Composite.apply(%{}, composite, %{names: %{}}) end
+  end
+
   test "recursively apply Ecto.Queryable.to_query to input query" do
     assert "users"
            |> Composite.new(%{})

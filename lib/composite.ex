@@ -26,7 +26,8 @@ defmodule Composite do
             dep_definitions: %{},
             params: nil,
             input_query: nil,
-            required_deps: []
+            required_deps: [],
+            strict: false
 
   @type dependency_name :: atom()
   @type dependencies ::
@@ -39,6 +40,7 @@ defmodule Composite do
           | {:on_ignore, (query -> query)}
           | {:ignore_requires, dependencies()}
   @type dependency_option :: {:requires, dependencies()}
+  @type option :: {:strict, boolean()}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query) | (query, params() -> query)
@@ -69,9 +71,16 @@ defmodule Composite do
       |> where(active: true)
       |> Composite.apply(composite, params)
       |> Repo.all()
+
+  ### Options
+
+  * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
+  Defaults to `false`.
   """
-  @spec new :: t(any())
-  def new, do: %__MODULE__{}
+  @spec new([option]) :: t(any())
+  def new(opts \\ []) do
+    %__MODULE__{strict: Keyword.get(opts, :strict, false)}
+  end
 
   @doc """
   Initializes a `Composite` struct with `query` and `params`.
@@ -91,10 +100,19 @@ defmodule Composite do
 
   Please note, that there is no explicit `Composite.apply/1` call before `Repo.all/1`, because `Composite`
   implements `Ecto.Queryable` protocol.
+
+  ### Options
+
+  * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
+  Defaults to `false`.
   """
-  @spec new(query, params()) :: t(query) when query: any()
-  def new(input_query, params) do
-    %__MODULE__{params: params, input_query: input_query}
+  @spec new(query, params(), [option]) :: t(query) when query: any()
+  def new(input_query, params, opts \\ []) do
+    %__MODULE__{
+      params: params,
+      input_query: input_query,
+      strict: Keyword.get(opts, :strict, false)
+    }
   end
 
   @doc """
@@ -241,6 +259,8 @@ defmodule Composite do
       |> set_once!(:input_query, input_query)
       |> set_once!(:params, params)
 
+    maybe_raise_on_unknown_params(composite)
+
     {query, loaded_deps} =
       load_dependencies(
         composite.input_query,
@@ -385,6 +405,44 @@ defmodule Composite do
       end)
 
     {query, MapSet.union(loaded_deps, deps_to_load)}
+  end
+
+  defp maybe_raise_on_unknown_params(composite) do
+    if composite.strict and
+         ((is_map(composite.params) and not is_struct(composite.params)) or
+            Keyword.keyword?(composite.params)) do
+      paths = Enum.map(composite.param_definitions, &elem(&1, 0))
+
+      maybe_raise_on_unknown_params(composite.params, paths, [])
+    end
+
+    :noop
+  end
+
+  defp maybe_raise_on_unknown_params(params, paths, current_path) do
+    paths = Enum.group_by(paths, &hd/1, &tl/1)
+
+    absent_paths =
+      Enum.flat_map(params, fn {key, value} ->
+        case Enum.find(paths, fn {path_key, _subpaths} ->
+               path_key == key
+             end) do
+          nil ->
+            [current_path ++ [key]]
+
+          {^key, [[]]} ->
+            []
+
+          {^key, subpaths} ->
+            maybe_raise_on_unknown_params(value, subpaths, current_path ++ [key])
+            []
+        end
+      end)
+
+    if absent_paths != [] do
+      raise ArgumentError,
+            "Unknown parameters found under the following paths: #{Enum.map_join(absent_paths, ", ", &inspect/1)}"
+    end
   end
 
   if Code.ensure_loaded?(Ecto.Queryable) do
