@@ -407,28 +407,43 @@ defmodule Composite do
     {query, MapSet.union(loaded_deps, deps_to_load)}
   end
 
-  defp maybe_raise_on_unknown_params(%__MODULE__{strict: true, params: params} = composite) do
-    if (is_map(params) and not is_struct(params)) or Keyword.keyword?(params) do
-      diff =
-        MapSet.difference(
-          MapSet.new(Enum.map(params, &elem(&1, 0))),
-          MapSet.new(
-            composite.param_definitions
-            |> Enum.map(&elem(&1, 0))
-            |> Enum.map(&List.first/1)
-          )
-        )
+  defp maybe_raise_on_unknown_params(composite) do
+    if composite.strict and
+         ((is_map(composite.params) and not is_struct(composite.params)) or
+            Keyword.keyword?(composite.params)) do
+      paths = Enum.map(composite.param_definitions, &elem(&1, 0))
 
-      case MapSet.size(diff) do
-        0 -> :noop
-        _ -> raise ArgumentError, "Unknown params: #{inspect(MapSet.to_list(diff))}"
-      end
-    else
-      :noop
+      maybe_raise_on_unknown_params(composite.params, paths, [])
     end
+
+    :noop
   end
 
-  defp maybe_raise_on_unknown_params(_composite), do: :noop
+  defp maybe_raise_on_unknown_params(params, paths, current_path) do
+    paths = Enum.group_by(paths, &hd/1, &tl/1)
+
+    absent_paths =
+      Enum.flat_map(params, fn {key, value} ->
+        case Enum.find(paths, fn {path_key, _subpaths} ->
+               path_key == key
+             end) do
+          nil ->
+            [current_path ++ [key]]
+
+          {^key, [[]]} ->
+            []
+
+          {^key, subpaths} ->
+            maybe_raise_on_unknown_params(value, subpaths, current_path ++ [key])
+            []
+        end
+      end)
+
+    if absent_paths != [] do
+      raise ArgumentError,
+            "Unknown parameters found under the following paths: #{Enum.map_join(absent_paths, ", ", &inspect/1)}"
+    end
+  end
 
   if Code.ensure_loaded?(Ecto.Queryable) do
     defimpl Ecto.Queryable do
