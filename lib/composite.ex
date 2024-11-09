@@ -22,6 +22,15 @@ defmodule Composite do
   """
   import Kernel, except: [apply: 3]
 
+  @derive {Inspect,
+           optional: [
+             :param_definitions,
+             :dep_definitions,
+             :params,
+             :input_query,
+             :required_deps,
+             :strict
+           ]}
   defstruct param_definitions: [],
             dep_definitions: %{},
             params: nil,
