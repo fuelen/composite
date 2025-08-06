@@ -1,4 +1,6 @@
 defmodule Composite do
+  import Ecto.Query, only: [where: 3]
+
   @moduledoc """
   A utility for writing dynamic queries.
 
@@ -48,6 +50,7 @@ defmodule Composite do
           | {:ignore?, (any() -> boolean())}
           | {:on_ignore, (query -> query)}
           | {:ignore_requires, dependencies()}
+          | {:force_empty_result?, (any() -> boolean())}
   @type dependency_option :: {:requires, dependencies()}
   @type option :: {:strict, boolean()}
   @type param_path_item :: any()
@@ -157,6 +160,14 @@ defmodule Composite do
       |> Composite.new(params)
       |> Composite.param([:filter, :name], &where(&1, name: ^&2))
 
+  Example with `:force_empty_result?`:
+
+      params = %{user_ids: [1, 2], status: "deleted"}
+
+      User
+      |> Composite.new(params)
+      |> Composite.param(:user_ids, &where(&1, [user], user.id in ^&2), force_empty_result?: &(&1 == []))
+
   ### Options
 
   * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied.
@@ -169,6 +180,8 @@ defmodule Composite do
   Defaults to `nil` (which is equivalent to `[]`).
   * `:ignore_requires` - points to the dependencies which has to be loaded when value is ignored. May be needed
   for custom `:on_ignore` implementation.
+  * `:force_empty_result?` - if function returns `true`, then the query will be forced to return no results
+  by applying `where(query, [_], false)`. Takes precedence over `:ignore?` and `:on_ignore`. Defaults to `fn _ -> false end`.
   """
   @spec param(t(query), param_path_item() | [param_path_item()], apply_fun(query), [
           param_option(query)
@@ -181,7 +194,14 @@ defmodule Composite do
         opts \\ []
       )
       when is_function(func, 1) or is_function(func, 2) do
-    ensure_unknown_opts_absent!(opts, [:ignore?, :on_ignore, :requires, :ignore_requires])
+    ensure_unknown_opts_absent!(opts, [
+      :ignore?,
+      :on_ignore,
+      :requires,
+      :ignore_requires,
+      :force_empty_result?
+    ])
+
     %{composite | param_definitions: [{List.wrap(path), func, opts} | param_definitions]}
   end
 
@@ -286,49 +306,55 @@ defmodule Composite do
         value = get_in(composite.params, path)
 
         ignore? = Keyword.get(opts, :ignore?, &empty_value?/1)
+        force_empty_result? = Keyword.get(opts, :force_empty_result?, fn _ -> false end)
 
-        if ignore?.(value) do
-          on_ignore =
-            case Keyword.fetch(opts, :on_ignore) do
-              {:ok, on_ignore} when is_function(on_ignore, 1) -> on_ignore
-              :error -> &Function.identity/1
+        cond do
+          force_empty_result?.(value) == true ->
+            {where(query, [_], false), loaded_deps}
+
+          ignore?.(value) == true ->
+            on_ignore =
+              case Keyword.fetch(opts, :on_ignore) do
+                {:ok, on_ignore} when is_function(on_ignore, 1) -> on_ignore
+                :error -> &Function.identity/1
+              end
+
+            required_deps = opts |> Keyword.get(:ignore_requires) |> List.wrap()
+
+            {query, loaded_deps} =
+              load_dependencies(
+                query,
+                composite.params,
+                composite.dep_definitions,
+                loaded_deps,
+                required_deps
+              )
+
+            {on_ignore.(query), loaded_deps}
+
+          true ->
+            required_deps =
+              opts
+              |> Keyword.get(:requires)
+              |> case do
+                requires when is_function(requires, 1) -> requires.(value)
+                requires -> requires
+              end
+              |> List.wrap()
+
+            {query, loaded_deps} =
+              load_dependencies(
+                query,
+                composite.params,
+                composite.dep_definitions,
+                loaded_deps,
+                required_deps
+              )
+
+            case func do
+              func when is_function(func, 1) -> {func.(query), loaded_deps}
+              func when is_function(func, 2) -> {func.(query, value), loaded_deps}
             end
-
-          required_deps = opts |> Keyword.get(:ignore_requires) |> List.wrap()
-
-          {query, loaded_deps} =
-            load_dependencies(
-              query,
-              composite.params,
-              composite.dep_definitions,
-              loaded_deps,
-              required_deps
-            )
-
-          {on_ignore.(query), loaded_deps}
-        else
-          required_deps =
-            opts
-            |> Keyword.get(:requires)
-            |> case do
-              requires when is_function(requires, 1) -> requires.(value)
-              requires -> requires
-            end
-            |> List.wrap()
-
-          {query, loaded_deps} =
-            load_dependencies(
-              query,
-              composite.params,
-              composite.dep_definitions,
-              loaded_deps,
-              required_deps
-            )
-
-          case func do
-            func when is_function(func, 1) -> {func.(query), loaded_deps}
-            func when is_function(func, 2) -> {func.(query, value), loaded_deps}
-          end
         end
       end)
 
