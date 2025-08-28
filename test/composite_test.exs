@@ -252,4 +252,50 @@ defmodule CompositeTest do
            |> Ecto.Queryable.to_query()
            |> inspect() == inspect(from(users in "users"))
   end
+
+  test "new/1 with empty_values option" do
+    composite = Composite.new(empty_values: [nil, "EMPTY"])
+    
+    assert composite.empty_values == [nil, "EMPTY"]
+    
+    # Test that the default ignore? behavior uses the custom empty_values
+    params = %{search: "EMPTY", filter: nil, name: "John"}
+    
+    query = %{base: true}
+    |> Composite.new(params, empty_values: [nil, "EMPTY"])
+    |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
+    |> Composite.param(:filter, fn query, _value -> Map.put(query, :filter_applied, true) end)
+    |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
+    |> Composite.apply()
+    
+    # search and filter should be ignored (they're in empty_values)
+    # name should be applied (it's not in empty_values)
+    assert Map.get(query, :search_applied) == nil
+    assert Map.get(query, :filter_applied) == nil
+    assert query.name_applied == true
+    assert query.base == true
+  end
+
+  test "default empty_values behavior" do
+    composite = Composite.new()
+    
+    # Should use the default empty_values
+    assert composite.empty_values == [nil, "", [], %{}]
+    
+    params = %{search: "", filter: [], name: "John"}
+    
+    query = %{base: true}
+    |> Composite.new(params)
+    |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
+    |> Composite.param(:filter, fn query, _value -> Map.put(query, :filter_applied, true) end)
+    |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
+    |> Composite.apply()
+    
+    # search and filter should be ignored (they're in default empty_values)
+    # name should be applied (it's not in empty_values)
+    assert Map.get(query, :search_applied) == nil
+    assert Map.get(query, :filter_applied) == nil
+    assert query.name_applied == true
+    assert query.base == true
+  end
 end

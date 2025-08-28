@@ -29,14 +29,16 @@ defmodule Composite do
              :params,
              :input_query,
              :required_deps,
-             :strict
+             :strict,
+             :empty_values
            ]}
   defstruct param_definitions: [],
             dep_definitions: %{},
             params: nil,
             input_query: nil,
             required_deps: [],
-            strict: false
+            strict: false,
+            empty_values: [nil, "", [], %{}]
 
   @type dependency_name :: atom()
   @type dependencies ::
@@ -49,7 +51,7 @@ defmodule Composite do
           | {:on_ignore, (query -> query)}
           | {:ignore_requires, dependencies()}
   @type dependency_option :: {:requires, dependencies()}
-  @type option :: {:strict, boolean()}
+  @type option :: {:strict, boolean()} | {:empty_values, [any()]}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query) | (query, params() -> query)
@@ -61,7 +63,9 @@ defmodule Composite do
           },
           required_deps: [dependency_name()],
           params: params() | nil,
-          input_query: query
+          input_query: query,
+          strict: boolean(),
+          empty_values: [any()]
         }
 
   @doc """
@@ -85,10 +89,15 @@ defmodule Composite do
 
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
+  * `:empty_values` - a list of values that should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
+  Defaults to `[nil, "", [], %{}]`.
   """
   @spec new([option]) :: t(any())
   def new(opts \\ []) do
-    %__MODULE__{strict: Keyword.get(opts, :strict, false)}
+    %__MODULE__{
+      strict: Keyword.get(opts, :strict, false),
+      empty_values: Keyword.get(opts, :empty_values, [nil, "", [], %{}])
+    }
   end
 
   @doc """
@@ -114,13 +123,16 @@ defmodule Composite do
 
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
+  * `:empty_values` - a list of values that should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
+  Defaults to `[nil, "", [], %{}]`.
   """
   @spec new(query, params(), [option]) :: t(query) when query: any()
   def new(input_query, params, opts \\ []) do
     %__MODULE__{
       params: params,
       input_query: input_query,
-      strict: Keyword.get(opts, :strict, false)
+      strict: Keyword.get(opts, :strict, false),
+      empty_values: Keyword.get(opts, :empty_values, [nil, "", [], %{}])
     }
   end
 
@@ -160,7 +172,7 @@ defmodule Composite do
   ### Options
 
   * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied.
-  Default value is `&(&1 in [nil, "", [], %{}])`.
+  Default value is `&(&1 in [nil, "", [], %{}])`, which can be customized via the `:empty_values` option when creating the composite.
   * `:on_ignore` - a function that will be applied instead of `t:apply_fun/1` if value is ignored.
   Defaults to `Function.identity/1`.
   * `:requires` - points to the dependencies which has to be loaded before calling `t:apply_fun/1`.
@@ -285,7 +297,7 @@ defmodule Composite do
       |> Enum.reduce({query, loaded_deps}, fn {path, func, opts}, {query, loaded_deps} ->
         value = get_in(composite.params, path)
 
-        ignore? = Keyword.get(opts, :ignore?, &empty_value?/1)
+        ignore? = Keyword.get(opts, :ignore?, fn value -> value in composite.empty_values end)
 
         if ignore?.(value) do
           on_ignore =
@@ -346,10 +358,6 @@ defmodule Composite do
       ) do
     dependencies = List.wrap(dependency_or_dependencies)
     %__MODULE__{composite | required_deps: dependencies ++ required_deps}
-  end
-
-  defp empty_value?(value) do
-    value in [nil, "", [], %{}]
   end
 
   defp ensure_unknown_opts_absent!([], _allowlist), do: :ok
