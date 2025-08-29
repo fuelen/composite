@@ -182,7 +182,7 @@ defmodule Composite do
   ### Options
 
   * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied.
-  Default value is `composite.ignore?`, which can be customized via the `:ignore?` option when creating the composite.
+  Default value is set by `:ignore?` option when creating the composite.
   * `:on_ignore` - a function that will be applied instead of `t:apply_fun/1` if value is ignored.
   Defaults to `Function.identity/1`.
   * `:requires` - points to the dependencies which has to be loaded before calling `t:apply_fun/1`.
