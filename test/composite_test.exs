@@ -253,19 +253,19 @@ defmodule CompositeTest do
            |> inspect() == inspect(from(users in "users"))
   end
 
-  test "new/1 with empty_value? option" do
-    composite = Composite.new(empty_value?: &(&1 in [nil, "EMPTY"]))
+  test "new/1 with ignore? option" do
+    composite = Composite.new(ignore?: &(&1 in [nil, "EMPTY"]))
 
-    assert is_function(composite.empty_value?, 1)
-    assert composite.empty_value?.(nil) == true
-    assert composite.empty_value?.("EMPTY") == true
-    assert composite.empty_value?.("John") == false
+    assert is_function(composite.ignore?, 1)
+    assert composite.ignore?.(nil) == true
+    assert composite.ignore?.("EMPTY") == true
+    assert composite.ignore?.("John") == false
 
     params = %{search: "EMPTY", filter: nil, name: "John"}
 
     query =
       %{base: true}
-      |> Composite.new(params, empty_value?: &(&1 in [nil, "EMPTY"]))
+      |> Composite.new(params, ignore?: &(&1 in [nil, "EMPTY"]))
       |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
       |> Composite.param(:filter, fn query, _value -> Map.put(query, :filter_applied, true) end)
       |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
@@ -277,15 +277,15 @@ defmodule CompositeTest do
     assert query.base == true
   end
 
-  test "default empty_value? behavior" do
+  test "default ignore? behavior" do
     composite = Composite.new()
 
-    assert is_function(composite.empty_value?, 1)
-    assert composite.empty_value?.(nil) == true
-    assert composite.empty_value?.("") == true
-    assert composite.empty_value?.([]) == true
-    assert composite.empty_value?.(%{}) == true
-    assert composite.empty_value?.("John") == false
+    assert is_function(composite.ignore?, 1)
+    assert composite.ignore?.(nil) == true
+    assert composite.ignore?.("") == true
+    assert composite.ignore?.([]) == true
+    assert composite.ignore?.(%{}) == true
+    assert composite.ignore?.("John") == false
 
     params = %{search: "", filter: [], name: "John"}
 
@@ -303,13 +303,13 @@ defmodule CompositeTest do
     assert query.base == true
   end
 
-  test "empty_value? with operations" do
+  test "ignore? with operations" do
     params = %{search: " \t ", min_age: 0, max_length: -1, user_ids: []}
 
     query =
       %{base: true}
       |> Composite.new(params,
-        empty_value?: fn
+        ignore?: fn
           value when is_binary(value) -> String.trim(value) == ""
           value when is_number(value) -> value <= 0
           value when is_list(value) -> value == []
@@ -326,10 +326,6 @@ defmodule CompositeTest do
       end)
       |> Composite.apply()
 
-    assert Map.get(query, :search_applied) == nil
-    assert Map.get(query, :min_age_applied) == nil
-    assert Map.get(query, :max_length_applied) == nil
-    assert Map.get(query, :user_ids_applied) == nil
-    assert query.base == true
+    assert query == %{base: true}
   end
 end
