@@ -69,7 +69,9 @@ defmodule Composite do
         }
 
   @doc """
-  Default empty value function. Returns `true` if the value is `nil`, `""`, `[]`, or `%{}`.
+  Default ignore function.
+
+  Returns `true` if the value is `nil`, `""`, `[]`, or `%{}`.
   """
   @spec default_ignore?(any()) :: boolean()
   def default_ignore?(value) do
