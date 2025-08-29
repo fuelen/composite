@@ -133,8 +133,8 @@ defmodule Composite do
 
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
-  * `:ignore?` - a function that determines if a value should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
-  Defaults to `&Composite.default_ignore?/1` which checks if the value is in `[nil, "", [], %{}]`.
+  * `:ignore?` - a function that determines the default behaviour of `:ignore?` option in `param/4`.
+  Defaults to `&Composite.default_ignore?/1`.
   """
   @spec new(query, params(), [option]) :: t(query) when query: any()
   def new(input_query, params, opts \\ []) do
