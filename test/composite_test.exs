@@ -253,35 +253,39 @@ defmodule CompositeTest do
            |> inspect() == inspect(from(users in "users"))
   end
 
-  test "new/1 with empty_values option" do
-    composite = Composite.new(empty_values: [nil, "EMPTY"])
+  test "new/1 with empty_value? option" do
+    composite = Composite.new(empty_value?: &(&1 in [nil, "EMPTY"]))
 
-    assert composite.empty_values == [nil, "EMPTY"]
+    assert is_function(composite.empty_value?, 1)
+    assert composite.empty_value?.(nil) == true
+    assert composite.empty_value?.("EMPTY") == true
+    assert composite.empty_value?.("John") == false
 
-    # Test that the default ignore? behavior uses the custom empty_values
     params = %{search: "EMPTY", filter: nil, name: "John"}
 
     query =
       %{base: true}
-      |> Composite.new(params, empty_values: [nil, "EMPTY"])
+      |> Composite.new(params, empty_value?: &(&1 in [nil, "EMPTY"]))
       |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
       |> Composite.param(:filter, fn query, _value -> Map.put(query, :filter_applied, true) end)
       |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
       |> Composite.apply()
 
-    # search and filter should be ignored (they're in empty_values)
-    # name should be applied (it's not in empty_values)
     assert Map.get(query, :search_applied) == nil
     assert Map.get(query, :filter_applied) == nil
     assert query.name_applied == true
     assert query.base == true
   end
 
-  test "default empty_values behavior" do
+  test "default empty_value? behavior" do
     composite = Composite.new()
 
-    # Should use the default empty_values
-    assert composite.empty_values == [nil, "", [], %{}]
+    assert is_function(composite.empty_value?, 1)
+    assert composite.empty_value?.(nil) == true
+    assert composite.empty_value?.("") == true
+    assert composite.empty_value?.([]) == true
+    assert composite.empty_value?.(%{}) == true
+    assert composite.empty_value?.("John") == false
 
     params = %{search: "", filter: [], name: "John"}
 
@@ -293,11 +297,39 @@ defmodule CompositeTest do
       |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
       |> Composite.apply()
 
-    # search and filter should be ignored (they're in default empty_values)
-    # name should be applied (it's not in empty_values)
     assert Map.get(query, :search_applied) == nil
     assert Map.get(query, :filter_applied) == nil
     assert query.name_applied == true
+    assert query.base == true
+  end
+
+  test "empty_value? with operations" do
+    params = %{search: " \t ", min_age: 0, max_length: -1, user_ids: []}
+
+    query =
+      %{base: true}
+      |> Composite.new(params,
+        empty_value?: fn
+          value when is_binary(value) -> String.trim(value) == ""
+          value when is_number(value) -> value <= 0
+          value when is_list(value) -> value == []
+          value -> value in [nil, %{}]
+        end
+      )
+      |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
+      |> Composite.param(:min_age, fn query, _value -> Map.put(query, :min_age_applied, true) end)
+      |> Composite.param(:max_length, fn query, _value ->
+        Map.put(query, :max_length_applied, true)
+      end)
+      |> Composite.param(:user_ids, fn query, _value ->
+        Map.put(query, :user_ids_applied, true)
+      end)
+      |> Composite.apply()
+
+    assert Map.get(query, :search_applied) == nil
+    assert Map.get(query, :min_age_applied) == nil
+    assert Map.get(query, :max_length_applied) == nil
+    assert Map.get(query, :user_ids_applied) == nil
     assert query.base == true
   end
 end

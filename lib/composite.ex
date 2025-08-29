@@ -30,7 +30,7 @@ defmodule Composite do
              :input_query,
              :required_deps,
              :strict,
-             :empty_values
+             :empty_value?
            ]}
   defstruct param_definitions: [],
             dep_definitions: %{},
@@ -38,7 +38,7 @@ defmodule Composite do
             input_query: nil,
             required_deps: [],
             strict: false,
-            empty_values: [nil, "", [], %{}]
+            empty_value?: &__MODULE__.default_empty_value?/1
 
   @type dependency_name :: atom()
   @type dependencies ::
@@ -51,7 +51,7 @@ defmodule Composite do
           | {:on_ignore, (query -> query)}
           | {:ignore_requires, dependencies()}
   @type dependency_option :: {:requires, dependencies()}
-  @type option :: {:strict, boolean()} | {:empty_values, [any()]}
+  @type option :: {:strict, boolean()} | {:empty_value?, (any() -> boolean())}
   @type param_path_item :: any()
   @type apply_fun(query) :: (query, value :: any() -> query) | (query -> query)
   @type load_dependency(query) :: (query -> query) | (query, params() -> query)
@@ -65,8 +65,13 @@ defmodule Composite do
           params: params() | nil,
           input_query: query,
           strict: boolean(),
-          empty_values: [any()]
+          empty_value?: (any() -> boolean())
         }
+
+  @doc false
+  def default_empty_value?(value) do
+    value in [nil, "", [], %{}]
+  end
 
   @doc """
   Initializes a `Composite` struct with delayed application of `query` and `params`.
@@ -89,14 +94,14 @@ defmodule Composite do
 
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
-  * `:empty_values` - a list of values that should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
-  Defaults to `[nil, "", [], %{}]`.
+  * `:empty_value?` - a function that determines if a value should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
+  Defaults to `&Composite.default_empty_value?/1` which checks if the value is in `[nil, "", [], %{}]`.
   """
   @spec new([option]) :: t(any())
   def new(opts \\ []) do
     %__MODULE__{
       strict: Keyword.get(opts, :strict, false),
-      empty_values: Keyword.get(opts, :empty_values, [nil, "", [], %{}])
+      empty_value?: Keyword.get(opts, :empty_value?, &__MODULE__.default_empty_value?/1)
     }
   end
 
@@ -123,8 +128,8 @@ defmodule Composite do
 
   * `:strict` - if `true`, then `apply/3` will raise an error if the caller provides params that are not defined in `Composite.param/4`.
   Defaults to `false`.
-  * `:empty_values` - a list of values that should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
-  Defaults to `[nil, "", [], %{}]`.
+  * `:empty_value?` - a function that determines if a value should be considered "empty" and ignored by default when no explicit `:ignore?` option is provided in `param/4`.
+  Defaults to `&Composite.default_empty_value?/1` which checks if the value is in `[nil, "", [], %{}]`.
   """
   @spec new(query, params(), [option]) :: t(query) when query: any()
   def new(input_query, params, opts \\ []) do
@@ -132,7 +137,7 @@ defmodule Composite do
       params: params,
       input_query: input_query,
       strict: Keyword.get(opts, :strict, false),
-      empty_values: Keyword.get(opts, :empty_values, [nil, "", [], %{}])
+      empty_value?: Keyword.get(opts, :empty_value?, &__MODULE__.default_empty_value?/1)
     }
   end
 
@@ -172,7 +177,7 @@ defmodule Composite do
   ### Options
 
   * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied.
-  Default value is `&(&1 in [nil, "", [], %{}])`, which can be customized via the `:empty_values` option when creating the composite.
+  Default value is `composite.empty_value?`, which can be customized via the `:empty_value?` option when creating the composite.
   * `:on_ignore` - a function that will be applied instead of `t:apply_fun/1` if value is ignored.
   Defaults to `Function.identity/1`.
   * `:requires` - points to the dependencies which has to be loaded before calling `t:apply_fun/1`.
@@ -297,7 +302,7 @@ defmodule Composite do
       |> Enum.reduce({query, loaded_deps}, fn {path, func, opts}, {query, loaded_deps} ->
         value = get_in(composite.params, path)
 
-        ignore? = Keyword.get(opts, :ignore?, fn value -> value in composite.empty_values end)
+        ignore? = Keyword.get(opts, :ignore?, composite.empty_value?)
 
         if ignore?.(value) do
           on_ignore =
