@@ -294,10 +294,7 @@ defmodule CompositeTest do
       |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
       |> Composite.apply()
 
-    assert Map.get(query, :search_applied) == nil
-    assert Map.get(query, :filter_applied) == nil
-    assert query.name_applied == true
-    assert query.base == true
+    assert query == %{name_applied: true, base: true}
   end
 
   test "ignore? with operations" do
