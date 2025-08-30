@@ -252,4 +252,74 @@ defmodule CompositeTest do
            |> Ecto.Queryable.to_query()
            |> inspect() == inspect(from(users in "users"))
   end
+
+  test "new/1 with ignore? option" do
+    composite = Composite.new(ignore?: &(&1 in [nil, "EMPTY"]))
+
+    assert is_function(composite.ignore?, 1)
+    assert composite.ignore?.(nil) == true
+    assert composite.ignore?.("EMPTY") == true
+    assert composite.ignore?.("John") == false
+
+    params = %{search: "EMPTY", filter: nil, name: "John"}
+
+    query =
+      %{base: true}
+      |> Composite.new(params, ignore?: &(&1 in [nil, "EMPTY"]))
+      |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
+      |> Composite.param(:filter, fn query, _value -> Map.put(query, :filter_applied, true) end)
+      |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
+      |> Composite.apply()
+
+    assert query == %{name_applied: true, base: true}
+  end
+
+  test "default ignore? behavior" do
+    composite = Composite.new()
+
+    assert is_function(composite.ignore?, 1)
+    assert composite.ignore?.(nil) == true
+    assert composite.ignore?.("") == true
+    assert composite.ignore?.([]) == true
+    assert composite.ignore?.(%{}) == true
+    assert composite.ignore?.("John") == false
+
+    params = %{search: "", filter: [], name: "John"}
+
+    query =
+      %{base: true}
+      |> Composite.new(params)
+      |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
+      |> Composite.param(:filter, fn query, _value -> Map.put(query, :filter_applied, true) end)
+      |> Composite.param(:name, fn query, _value -> Map.put(query, :name_applied, true) end)
+      |> Composite.apply()
+
+    assert query == %{name_applied: true, base: true}
+  end
+
+  test "ignore? with operations" do
+    params = %{search: " \t ", min_age: 0, max_length: -1, user_ids: []}
+
+    query =
+      %{base: true}
+      |> Composite.new(params,
+        ignore?: fn
+          value when is_binary(value) -> String.trim(value) == ""
+          value when is_number(value) -> value <= 0
+          value when is_list(value) -> value == []
+          value -> value in [nil, %{}]
+        end
+      )
+      |> Composite.param(:search, fn query, _value -> Map.put(query, :search_applied, true) end)
+      |> Composite.param(:min_age, fn query, _value -> Map.put(query, :min_age_applied, true) end)
+      |> Composite.param(:max_length, fn query, _value ->
+        Map.put(query, :max_length_applied, true)
+      end)
+      |> Composite.param(:user_ids, fn query, _value ->
+        Map.put(query, :user_ids_applied, true)
+      end)
+      |> Composite.apply()
+
+    assert query == %{base: true}
+  end
 end
