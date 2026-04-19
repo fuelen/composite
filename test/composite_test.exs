@@ -222,6 +222,33 @@ defmodule CompositeTest do
     end
   end
 
+  test "strict: true does not raise when all params are known (happy path)" do
+    composite =
+      [strict: true]
+      |> Composite.new()
+      |> Composite.param(:name, &Map.put(&1, :name, &2))
+      |> Composite.param([:company, :name], &Map.put(&1, :company_name, &2))
+      |> Composite.param([:company, :type], &Map.put(&1, :company_type, &2))
+
+    assert Composite.apply(%{}, composite, %{
+             name: "John",
+             company: %{name: "Pear", type: "LLC"}
+           }) == %{name: "John", company_name: "Pear", company_type: "LLC"}
+  end
+
+  test "strict: true supports keyword list params" do
+    composite =
+      [strict: true]
+      |> Composite.new()
+      |> Composite.param(:name, &Map.put(&1, :name, &2))
+
+    assert Composite.apply(%{}, composite, name: "John") == %{name: "John"}
+
+    assert_raise ArgumentError,
+                 "Unknown parameters found under the following paths: [:surname]",
+                 fn -> Composite.apply(%{}, composite, name: "John", surname: "Doe") end
+  end
+
   test "unknown params when strict option is true" do
     composite =
       [strict: true]
