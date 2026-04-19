@@ -439,25 +439,21 @@ defmodule Composite do
 
       maybe_raise_on_unknown_params(composite.params, paths, [])
     end
-
-    :noop
   end
 
   defp maybe_raise_on_unknown_params(params, paths, current_path) do
-    paths = Enum.group_by(paths, &hd/1, &tl/1)
+    paths_by_key = Enum.group_by(paths, &hd/1, &tl/1)
 
     absent_paths =
       Enum.flat_map(params, fn {key, value} ->
-        case Enum.find(paths, fn {path_key, _subpaths} ->
-               path_key == key
-             end) do
-          nil ->
+        case Map.fetch(paths_by_key, key) do
+          :error ->
             [current_path ++ [key]]
 
-          {^key, [[]]} ->
+          {:ok, [[]]} ->
             []
 
-          {^key, subpaths} ->
+          {:ok, subpaths} ->
             maybe_raise_on_unknown_params(value, subpaths, current_path ++ [key])
             []
         end
