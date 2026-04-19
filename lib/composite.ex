@@ -399,9 +399,7 @@ defmodule Composite do
   end
 
   defp load_dependencies(query, params, deps_definitions, loaded_deps, required_deps) do
-    deps_to_load = required_deps |> MapSet.new() |> MapSet.difference(loaded_deps)
-
-    Enum.reduce(deps_to_load, {query, loaded_deps}, fn dependency_name, {query, loaded_deps} ->
+    Enum.reduce(required_deps, {query, loaded_deps}, fn dependency_name, {query, loaded_deps} ->
       if dependency_name in loaded_deps do
         {query, loaded_deps}
       else

@@ -150,6 +150,23 @@ defmodule CompositeTest do
              [:search, :a, :b]
   end
 
+  test "dependencies load in declaration order of :requires" do
+    # MapSet.new([:a, :b, :c, :d]) iterates as [:c, :a, :b, :d] — so a
+    # MapSet-based implementation would yield [:search, :d, :b, :a, :c].
+    # Declaration order must be preserved regardless.
+    result =
+      []
+      |> Composite.new(%{search: "x"})
+      |> Composite.param(:search, &[:search | &1], requires: [:a, :b, :c, :d])
+      |> Composite.dependency(:a, &[:a | &1])
+      |> Composite.dependency(:b, &[:b | &1])
+      |> Composite.dependency(:c, &[:c | &1])
+      |> Composite.dependency(:d, &[:d | &1])
+      |> Composite.apply()
+
+    assert result == [:search, :d, :c, :b, :a]
+  end
+
   test "dependency resolver with arity 2 accepts params as a second arg" do
     assert []
            |> Composite.new(%{search: "text"})
