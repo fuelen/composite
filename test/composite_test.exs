@@ -184,6 +184,25 @@ defmodule CompositeTest do
            |> Composite.apply() == [:a]
   end
 
+  test "dependency/4 warns and keeps last definition when declared twice" do
+    {result, warning} =
+      ExUnit.CaptureIO.with_io(:stderr, fn ->
+        []
+        |> Composite.new(%{search: "x"})
+        |> Composite.param(:search, &[:search | &1], requires: :orgs)
+        |> Composite.dependency(:orgs, &[:old | &1])
+        |> Composite.dependency(:orgs, &[:new | &1])
+        |> Composite.apply()
+      end)
+
+    assert result == [:search, :new]
+
+    [first_line | _] = String.split(warning, "\n")
+
+    assert first_line ==
+             "warning: dependency :orgs is already defined; the previous loader will be overwritten"
+  end
+
   test "using undefined dependency" do
     assert_raise ArgumentError,
                  "Unknown dependency: `something`. Please declare this dependency using Composite.dependency/4",

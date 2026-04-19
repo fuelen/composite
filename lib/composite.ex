@@ -258,6 +258,13 @@ defmodule Composite do
       )
       when is_function(func, 1) or is_function(func, 2) do
     ensure_unknown_opts_absent!(opts, [:requires])
+
+    if Map.has_key?(dep_definitions, dependency) do
+      IO.warn(
+        "dependency #{inspect(dependency)} is already defined; the previous loader will be overwritten"
+      )
+    end
+
     %{composite | dep_definitions: Map.put(dep_definitions, dependency, {func, opts})}
   end
 
