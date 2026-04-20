@@ -179,6 +179,19 @@ defmodule Composite do
       |> Composite.new(params)
       |> Composite.param([:filter, :name], &where(&1, name: ^&2))
 
+  The same parameter path may be declared more than once — all handlers
+  run, in declaration order, each receiving the same value. This is useful
+  when one parameter should affect several independent parts of the query:
+
+      # `:search` both narrows the result set and tweaks ordering.
+      composite
+      |> Composite.param(:search, fn query, term ->
+        where(query, [u], ilike(u.name, ^"%\#{term}%"))
+      end)
+      |> Composite.param(:search, fn query, term ->
+        order_by(query, [u], fragment("similarity(name, ?) DESC", ^term))
+      end)
+
   ### Options
 
   * `:ignore?` - if function returns `true`, then handler `t:apply_fun/1` won't be applied.

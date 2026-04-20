@@ -175,6 +175,18 @@ defmodule CompositeTest do
            |> Composite.apply() == [:search, {:a, %{search: "text"}}]
   end
 
+  test "duplicate param paths chain — all handlers run in declaration order" do
+    result =
+      []
+      |> Composite.new(%{search: "x"})
+      |> Composite.param(:search, &[:first | &1])
+      |> Composite.param(:search, &[:second | &1])
+      |> Composite.param(:search, &[:third | &1])
+      |> Composite.apply()
+
+    assert result == [:third, :second, :first]
+  end
+
   test "force require" do
     assert []
            |> Composite.new(%{})
