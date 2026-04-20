@@ -365,6 +365,56 @@ defmodule Composite do
   end
 
   @doc """
+  Applies handlers and reports whether the input query was modified.
+
+  Returns `:unchanged` if the resulting query is equal (`==`) to the input
+  query — i.e. no parameter handler, `:on_ignore` callback, dependency, or
+  `force_require/2` actually changed the query. Otherwise returns
+  `{:modified, query}`.
+
+  Useful for short-circuiting when no filters were provided:
+
+      User
+      |> Composite.new(params)
+      |> Composite.param(:company, &where(&1, company: ^&2))
+      |> Composite.param(:location, &where(&1, location: ^&2))
+      |> Composite.apply_tagged()
+      |> case do
+        {:modified, query} -> Repo.all(query)
+        :unchanged -> []
+      end
+
+  Requires `params` and `input_query` to be bound via `new/2`.
+  """
+  @spec apply_tagged(t(query)) :: :unchanged | {:modified, query} when query: any()
+  def apply_tagged(%__MODULE__{} = composite) do
+    applied = apply(composite)
+
+    if applied == composite.input_query do
+      :unchanged
+    else
+      {:modified, applied}
+    end
+  end
+
+  @doc """
+  Same as `apply_tagged/1`, but for composites built with `new/0`.
+
+  See `apply/3`.
+  """
+  @spec apply_tagged(query, t(query), params()) :: :unchanged | {:modified, query}
+        when query: any()
+  def apply_tagged(input_query, %__MODULE__{} = composite, params) do
+    applied = apply(input_query, composite, params)
+
+    if applied == input_query do
+      :unchanged
+    else
+      {:modified, applied}
+    end
+  end
+
+  @doc """
   Forces loading dependency even if it is not required by `params`.
   """
   @spec force_require(t(query), dependency_name() | [dependency_name()]) :: t(query)

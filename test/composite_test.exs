@@ -308,6 +308,68 @@ defmodule CompositeTest do
                  fn -> Composite.apply(%{}, composite, %{names: %{}}) end
   end
 
+  describe "apply_tagged/3" do
+    test "returns :unchanged when no handler fires" do
+      composite =
+        Composite.new()
+        |> Composite.param(:name, &[:name | &1])
+
+      assert Composite.apply_tagged([], composite, %{}) == :unchanged
+    end
+
+    test "returns {:modified, query} when a handler fires" do
+      composite =
+        Composite.new()
+        |> Composite.param(:name, &[:name | &1])
+
+      assert Composite.apply_tagged([], composite, %{name: "John"}) == {:modified, [:name]}
+    end
+  end
+
+  describe "apply_tagged/1" do
+    test "returns :unchanged when params are empty and no handlers fire" do
+      result =
+        []
+        |> Composite.new(%{})
+        |> Composite.param(:name, &[:name | &1])
+        |> Composite.param(:company, &[:company | &1])
+        |> Composite.apply_tagged()
+
+      assert result == :unchanged
+    end
+
+    test "returns {:modified, query} when at least one handler fires" do
+      result =
+        []
+        |> Composite.new(%{name: "John"})
+        |> Composite.param(:name, &[:name | &1])
+        |> Composite.param(:company, &[:company | &1])
+        |> Composite.apply_tagged()
+
+      assert result == {:modified, [:name]}
+    end
+
+    test "on_ignore counts as modification (input != applied)" do
+      result =
+        []
+        |> Composite.new(%{})
+        |> Composite.param(:order, &[&2 | &1], on_ignore: &[:default | &1])
+        |> Composite.apply_tagged()
+
+      assert result == {:modified, [:default]}
+    end
+
+    test "raises when input_query or params are not set (inherits apply/1 preconditions)" do
+      assert_raise ArgumentError, ":input_query is not set", fn ->
+        Composite.new() |> Composite.apply_tagged()
+      end
+
+      assert_raise ArgumentError, ":params is not set", fn ->
+        [] |> Composite.new(nil) |> Composite.apply_tagged()
+      end
+    end
+  end
+
   test "recursively apply Ecto.Queryable.to_query to input query" do
     assert "users"
            |> Composite.new(%{})
