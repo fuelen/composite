@@ -101,6 +101,31 @@ The loader function is invoked before invoking parameter handler.
 Dependencies can have other dependencies as well. Dependencies are loaded only when they're needed and only once.
 So, if multiple parameter handlers require the same table to be joined to the query, it will be joined only once without any errors.
 
+## Short-circuiting when no filters were provided
+
+By default, an empty `params` map produces the unmodified input query,
+which for something like `Repo.all/1` means returning every row. If you
+want to fall back to an empty result instead, use `Composite.apply_tagged/1`:
+
+```elixir
+def list_users(params) do
+  MyApp.User
+  |> Composite.new(params)
+  |> Composite.param(:name, &where(&1, name: ^&2))
+  |> Composite.param(:company_id, &where(&1, company_id: ^&2))
+  |> Composite.apply_tagged()
+  |> case do
+    {:modified, query} -> MyApp.Repo.all(query)
+    :unchanged -> []
+  end
+end
+```
+
+`apply_tagged/1` returns `:unchanged` when the resulting query is equal
+(`==`) to the input — i.e. no parameter handler, `:on_ignore` callback,
+or dependency actually touched the query — and `{:modified, query}`
+otherwise.
+
 ## Links
 
 * Article: [Writing dynamic Ecto queries with Composite](https://dev.to/arturplysiuk/writing-dynamic-ecto-queries-with-composite-26g4)
