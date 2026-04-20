@@ -72,6 +72,12 @@ defmodule Composite do
   Default ignore function.
 
   Returns `true` if the value is `nil`, `""`, `[]`, or `%{}`.
+
+      iex> Composite.default_ignore?(nil)
+      true
+
+      iex> Composite.default_ignore?("hello")
+      false
   """
   @spec default_ignore?(any()) :: boolean()
   def default_ignore?(value) do
@@ -128,6 +134,15 @@ defmodule Composite do
 
   Please note, that there is no explicit `Composite.apply/1` call before `Repo.all/1`, because `Composite`
   implements `Ecto.Queryable` protocol.
+
+  Since Composite works with any Elixir term, here is a non-Ecto example:
+
+      iex> []
+      ...> |> Composite.new(%{a: 1, b: 2, c: 3})
+      ...> |> Composite.param(:a, fn list, v -> [{:a, v} | list] end)
+      ...> |> Composite.param(:b, fn list, v -> [{:b, v} | list] end)
+      ...> |> Composite.apply()
+      [{:b, 2}, {:a, 1}]
 
   ### Options
 
@@ -398,6 +413,18 @@ defmodule Composite do
       end
 
   Requires `params` and `input_query` to be bound via `new/2`.
+
+      iex> []
+      ...> |> Composite.new(%{})
+      ...> |> Composite.param(:item, fn list, value -> [value | list] end)
+      ...> |> Composite.apply_tagged()
+      :unchanged
+
+      iex> []
+      ...> |> Composite.new(%{item: :a})
+      ...> |> Composite.param(:item, fn list, value -> [value | list] end)
+      ...> |> Composite.apply_tagged()
+      {:modified, [:a]}
   """
   @spec apply_tagged(t(query)) :: :unchanged | {:modified, query} when query: any()
   def apply_tagged(%__MODULE__{} = composite) do
