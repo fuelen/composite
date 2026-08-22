@@ -393,12 +393,12 @@ defmodule Composite do
   end
 
   @doc """
-  Applies handlers and reports whether the input query was modified.
+  Applies handlers and reports whether the input query changed.
 
   Returns `:unchanged` if the resulting query is equal (`==`) to the input
   query — i.e. no parameter handler, `:on_ignore` callback, dependency, or
   `force_require/2` actually changed the query. Otherwise returns
-  `{:modified, query}`.
+  `{:changed, query}`.
 
   Useful for short-circuiting when no filters were provided:
 
@@ -408,7 +408,7 @@ defmodule Composite do
       |> Composite.param(:location, &where(&1, location: ^&2))
       |> Composite.apply_tagged()
       |> case do
-        {:modified, query} -> Repo.all(query)
+        {:changed, query} -> Repo.all(query)
         :unchanged -> []
       end
 
@@ -424,16 +424,16 @@ defmodule Composite do
       ...> |> Composite.new(%{item: :a})
       ...> |> Composite.param(:item, fn list, value -> [value | list] end)
       ...> |> Composite.apply_tagged()
-      {:modified, [:a]}
+      {:changed, [:a]}
   """
-  @spec apply_tagged(t(query)) :: :unchanged | {:modified, query} when query: any()
+  @spec apply_tagged(t(query)) :: :unchanged | {:changed, query} when query: any()
   def apply_tagged(%__MODULE__{} = composite) do
     applied = apply(composite)
 
     if applied == composite.input_query do
       :unchanged
     else
-      {:modified, applied}
+      {:changed, applied}
     end
   end
 
@@ -442,7 +442,7 @@ defmodule Composite do
 
   See `apply/3`.
   """
-  @spec apply_tagged(query, t(query), params()) :: :unchanged | {:modified, query}
+  @spec apply_tagged(query, t(query), params()) :: :unchanged | {:changed, query}
         when query: any()
   def apply_tagged(input_query, %__MODULE__{} = composite, params) do
     applied = apply(input_query, composite, params)
@@ -450,7 +450,7 @@ defmodule Composite do
     if applied == input_query do
       :unchanged
     else
-      {:modified, applied}
+      {:changed, applied}
     end
   end
 

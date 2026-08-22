@@ -115,7 +115,7 @@ def list_users(params) do
   |> Composite.param(:company_id, &where(&1, company_id: ^&2))
   |> Composite.apply_tagged()
   |> case do
-    {:modified, query} -> MyApp.Repo.all(query)
+    {:changed, query} -> MyApp.Repo.all(query)
     :unchanged -> []
   end
 end
@@ -123,7 +123,7 @@ end
 
 `apply_tagged/1` returns `:unchanged` when the resulting query is equal
 (`==`) to the input — i.e. no parameter handler, `:on_ignore` callback,
-or dependency actually touched the query — and `{:modified, query}`
+or dependency actually touched the query — and `{:changed, query}`
 otherwise.
 
 ## Links

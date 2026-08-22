@@ -351,12 +351,12 @@ defmodule CompositeTest do
       assert Composite.apply_tagged([], composite, %{}) == :unchanged
     end
 
-    test "returns {:modified, query} when a handler fires" do
+    test "returns {:changed, query} when a handler fires" do
       composite =
         Composite.new()
         |> Composite.param(:name, &[:name | &1])
 
-      assert Composite.apply_tagged([], composite, %{name: "John"}) == {:modified, [:name]}
+      assert Composite.apply_tagged([], composite, %{name: "John"}) == {:changed, [:name]}
     end
   end
 
@@ -372,7 +372,7 @@ defmodule CompositeTest do
       assert result == :unchanged
     end
 
-    test "returns {:modified, query} when at least one handler fires" do
+    test "returns {:changed, query} when at least one handler fires" do
       result =
         []
         |> Composite.new(%{name: "John"})
@@ -380,7 +380,7 @@ defmodule CompositeTest do
         |> Composite.param(:company, &[:company | &1])
         |> Composite.apply_tagged()
 
-      assert result == {:modified, [:name]}
+      assert result == {:changed, [:name]}
     end
 
     test "on_ignore counts as modification (input != applied)" do
@@ -390,7 +390,7 @@ defmodule CompositeTest do
         |> Composite.param(:order, &[&2 | &1], on_ignore: &[:default | &1])
         |> Composite.apply_tagged()
 
-      assert result == {:modified, [:default]}
+      assert result == {:changed, [:default]}
     end
 
     test "raises when input_query or params are not set (inherits apply/1 preconditions)" do
