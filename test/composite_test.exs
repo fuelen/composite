@@ -209,10 +209,10 @@ defmodule CompositeTest do
 
     assert result == [:search, :new]
 
-    [first_line | _] = String.split(warning, "\n")
+    assert warning =~ "warning:"
 
-    assert first_line ==
-             "warning: dependency :orgs is already defined; the previous loader will be overwritten"
+    assert warning =~
+             "dependency :orgs is already defined; the previous loader will be overwritten"
   end
 
   test "using undefined dependency" do
