@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-22
+
 ### Added
 - `Composite.apply_tagged/1` and `Composite.apply_tagged/3` — return
   `:unchanged` when the applied query compares equal (`==`) to the input, or
@@ -98,7 +100,8 @@ Initial public release.
 - `Ecto.Queryable` implementation for direct use with `Repo.*` functions.
 - Support for `:requires` specified as a function of the parameter's value.
 
-[Unreleased]: https://github.com/fuelen/composite/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/fuelen/composite/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/fuelen/composite/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/fuelen/composite/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/fuelen/composite/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/fuelen/composite/compare/v0.4.3...v0.5.0
