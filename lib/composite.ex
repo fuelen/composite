@@ -545,11 +545,11 @@ defmodule Composite do
           :error ->
             [current_path ++ [key]]
 
-          {:ok, [[]]} ->
-            []
-
           {:ok, subpaths} ->
-            maybe_raise_on_unknown_params(value, subpaths, current_path ++ [key])
+            if [] not in subpaths and key_based_params?(value) do
+              maybe_raise_on_unknown_params(value, subpaths, current_path ++ [key])
+            end
+
             []
         end
       end)
@@ -558,6 +558,10 @@ defmodule Composite do
       raise ArgumentError,
             "Unknown parameters found under the following paths: #{Enum.map_join(absent_paths, ", ", &inspect/1)}"
     end
+  end
+
+  defp key_based_params?(params) do
+    (is_map(params) and not is_struct(params)) or Keyword.keyword?(params)
   end
 
   if Code.ensure_loaded?(Ecto.Queryable) do

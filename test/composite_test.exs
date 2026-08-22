@@ -297,6 +297,28 @@ defmodule CompositeTest do
                  fn -> Composite.apply(%{}, composite, name: "John", surname: "Doe") end
   end
 
+  test "strict: true accepts nil at a known nested parameter path" do
+    composite =
+      [strict: true]
+      |> Composite.new()
+      |> Composite.param([:company, :name], &Map.put(&1, :company_name, &2))
+
+    assert Composite.apply(%{}, composite, %{company: nil}) == %{}
+  end
+
+  test "strict: true accepts a value when both its path and a nested path are declared" do
+    composite =
+      [strict: true]
+      |> Composite.new()
+      |> Composite.param(:company, &Map.put(&1, :company, &2))
+      |> Composite.param([:company, :name], &Map.put(&1, :company_name, &2))
+
+    assert Composite.apply(%{}, composite, %{company: %{name: "Pear", type: "LLC"}}) == %{
+             company: %{name: "Pear", type: "LLC"},
+             company_name: "Pear"
+           }
+  end
+
   test "unknown params when strict option is true" do
     composite =
       [strict: true]
